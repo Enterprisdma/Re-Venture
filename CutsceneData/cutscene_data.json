@@ -3,5 +3,10 @@
         "images": ["Sprites/Cutscene/StartCutscene1.png", "Sprites/Cutscene/StartCutscene2.png"],
         "duration": 3.0,
         "text": ["테스트용 컷씬 자막1", "테스트용 컷씬 자막2"]
+    },
+    "2": {
+        "images": ["Sprites/Cutscene/StartCutscene1.png", "Sprites/Cutscene/StartCutscene2.png"],
+        "duration": 3.0,
+        "text": ["테스트용 컷씬 자막1", "테스트용 컷씬 자막2"]
     }
 }

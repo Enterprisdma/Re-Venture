@@ -13,6 +13,37 @@ def sungsoo_wihan_package_downloader(package):
         print("파이게임CE 설치 완료!")
     finally:
         print("파이게임CE가 설치되어 있군요! 잘했네~")
+    
+    print('게임 에셋을 다운로드합니다.')
+    url = "https://raw.githubusercontent.com/Enterprisdma/Re-Venture/main"
+    assets = [
+        "Sprites/Object/CompanyLogo.png",
+        "Sprites/Object/RE-Venture.png",
+        "Font/DNFForgedBlade-Medium.ttf",
+        "5km.png",
+        "CutsceneData/cutscene_data.json",
+    ]
+
+    assets += [f"Sprites/Backgrounds/Main{i}.png" for i in range(1, 5)]
+    assets += [f"Sprites/Cutscene/StartCutscene{i}.png" for i in range(1, 3)]
+    assets += [f"Sprites/Player/LEEJAMMIN{i}.png" for i in range(1, 17)]
+
+    import urllib.request
+    import os
+
+    for asset in assets:
+        if not os.path.exists(asset):
+            print(asset)
+            target_url = f"{url}/{asset}"
+            os.makedirs(os.path.dirname(asset), exist_ok=True)
+
+            try:
+                urllib.request.urlretrieve(target_url, asset)
+            except Exception as e:
+                print(f" {asset} 다운로드 실패")
+
+
+    print('완벽합니다.')
 
 
 sungsoo_wihan_package_downloader("pygame")
@@ -20,7 +51,7 @@ sungsoo_wihan_package_downloader("pygame")
 import pygame  # noqa: E402
 import math  # noqa: E402
 import json  # noqa: E402
-import random
+import random  # noqa: E402
 
 pygame.init()
 
@@ -282,6 +313,29 @@ class Camera:
         L, t = (sw - w) // 2, (sh - h) // 2
         subs = surf_zoomed.subsurface((L, t, w, h)).copy()
         return subs
+    
+class Player:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.x_velocity = 0
+        self.y_velocity = 0
+        self.gravity = 1200
+        self.max_fall_speed = 1500
+        self.accel = 0
+        self.width = 64
+        self.height = 64
+        self.grounded = False
+        self.state = "Normal" # "forcing", "stunned", "sliding"
+        self.facing = 1
+        self.iswarped = False
+
+        self.slide_timer = 0
+        self.slide_holding = False
+        self.sliding_velocity = 5000
+
+        self.weapon_cooldown_list = []
+        
 
 class Game:
     def __init__(self):
@@ -308,7 +362,7 @@ class Game:
 
         if self.screen_blink.active:
             self.screen_blink.update(delta)
-            self.screen_blink.draw()
+            self.screen_blink.draw(self.game_surface)
 
 
     
@@ -318,9 +372,12 @@ class Game:
 
         if self.world_timer < 10:
             self.blink_timer += delta
-            if self.blink_timer >= 0.5:
+            if self.blink_timer >= 0.15:
                 self.screen_blink.reset()
                 self.blink_timer = 0
+        else:
+            self.blink_timer = 0
+            self.screen_blink.reset()
         
 
         if self.world_timer <= self.fade_in:
@@ -434,15 +491,16 @@ class ScreenFader:
 class ScreenBlinker:
     def __init__(self, color, duration):
         self.surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT)).convert_alpha()
+        self.surface.fill(color)
         self.color = color
         self.timer = 0
         self.transparent = 0
         self.active = True
 
-        self.fading = UIManager(duration=1.0)
-        self.fade_in = 3.0
+        self.fading = UIManager(duration=0.05)
+        self.fade_in = 0.25
         self.duration = duration
-        self.fade_out = 1.0
+        self.fade_out = 0.25
         self.show_cutscene = False
     
     def update(self, delta):
@@ -465,11 +523,13 @@ class ScreenBlinker:
             self.transparent = 0
             self.active = False
     
-    def draw(self):
+    def draw(self, target_surface=None):
+
+        if target_surface is None:
+            target_surface = screen
+
         self.surface.set_alpha(self.transparent)
-        if self.transparent >= 254:
-            screen.fill(BLACK)
-        screen.blit(self.surface, (0, 0))
+        target_surface.blit(self.surface, (0, 0))
     
     def reset(self):
         self.timer = 0

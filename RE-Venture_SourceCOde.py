@@ -74,7 +74,7 @@ class Camera:
             if self.lock_player and player:
                 # DOWNWELL 스타일: 플레이어 추적
                 player_screen_y = self.DrawAgain(player.y)
-                threshold = SCREEN_HEIGHT * 0.85  # 화면 3/4 지점
+                threshold = SCREEN_HEIGHT * 0.5  # 화면 2/4 지점
 
                 # 플레이어가 threshold보다 아래에 있으면 카메라 따라감
                 if player_screen_y > threshold:
@@ -693,6 +693,158 @@ class BounceBullet(Bullet):
                     self.active = False
                 return
 
+class LaserBeam:
+    def __init__(self, start_x, start_y, angle, max_length=2000, camera=None):
+        self.start_x = start_x
+        self.start_y = start_y
+        self.angle = angle
+        self.max_length = max_length
+        self.camera = camera
+
+        # 레이저 끝점 계산
+        self.end_x = start_x + math.cos(angle) * max_length
+        self.end_y = start_y + math.sin(angle) * max_length
+
+        # 실제 충돌 지점 (raycast 결과)
+        self.hit_x = self.end_x
+        self.hit_y = self.end_y
+        self.hit_something = False
+
+        # 시각 효과
+        self.lifetime = 0.1  # 0.1초 동안 표시
+        self.age = 0
+        self.active = True
+        self.width = 4  # 레이저 두께
+        self.color = YELLOW
+
+    def raycast(self, enemies, platforms):
+        """광선을 쏴서 첫 번째 충돌 지점 찾기"""
+        closest_distance = self.max_length
+        hit_point = (self.end_x, self.end_y)
+
+        # 방향 벡터
+        dir_x = math.cos(self.angle)
+        dir_y = math.sin(self.angle)
+
+        # 적과의 충돌 체크
+        for enemy in enemies:
+            if not enemy.active:
+                continue
+
+            # 레이와 사각형 교차 판정 (간단한 버전)
+            distance = self.line_rect_intersection(
+                self.start_x, self.start_y, self.end_x, self.end_y, enemy.get_rect()
+            )
+
+            if distance and distance < closest_distance:
+                closest_distance = distance
+                hit_point = (
+                    self.start_x + dir_x * distance,
+                    self.start_y + dir_y * distance,
+                )
+                # 적에게 데미지
+                enemy.take_damage(40)
+                self.hit_something = True
+
+        # 플랫폼과의 충돌 체크
+        for platform in platforms:
+            distance = self.line_rect_intersection(
+                self.start_x, self.start_y, self.end_x, self.end_y, platform.get_rect()
+            )
+
+            if distance and distance < closest_distance:
+                closest_distance = distance
+                hit_point = (
+                    self.start_x + dir_x * distance,
+                    self.start_y + dir_y * distance,
+                )
+                self.hit_something = True
+
+        # 충돌 지점 설정
+        self.hit_x, self.hit_y = hit_point
+
+    def line_rect_intersection(self, x1, y1, x2, y2, rect):
+        """선과 사각형의 교차 거리 계산"""
+        # 간단한 구현: 사각형 4개 변과 교차 체크
+        # 더 정확한 구현은 Liang-Barsky 알고리즘 사용
+
+        # 광선 방향
+        dx = x2 - x1
+        dy = y2 - y1
+        length = math.sqrt(dx**2 + dy**2)
+
+        if length == 0:
+            return None
+
+        # 정규화
+        dx /= length
+        dy /= length
+
+        # 샘플링 방식 (단순하지만 효과적)
+        steps = int(length)
+        for i in range(steps):
+            check_x = x1 + dx * i
+            check_y = y1 + dy * i
+
+            if rect.collidepoint(check_x, check_y):
+                return i  # 거리 반환
+
+        return None
+
+    def update(self, delta):
+        self.age += delta
+        if self.age >= self.lifetime:
+            self.active = False
+
+    def draw(self, surface, camera):
+        """레이저 선 그리기 (페이드아웃 효과)"""
+        screen_start_y = camera.DrawAgain(self.start_y)
+        screen_hit_y = camera.DrawAgain(self.hit_y)
+
+        # 페이드아웃 계산
+        progress = self.age / self.lifetime
+        alpha = int(255 * (1 - progress))
+
+        # 알파 지원 Surface에 그리기
+        temp_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+
+        # 메인 레이저 (밝은 색)
+        color_with_alpha = (*self.color[:3], alpha)
+        pygame.draw.line(
+            temp_surface,
+            color_with_alpha,
+            (int(self.start_x), int(screen_start_y)),
+            (int(self.hit_x), int(screen_hit_y)),
+            self.width,
+        )
+
+        # 외곽 글로우 효과 (더 두껍고 반투명)
+        glow_alpha = int(alpha * 0.3)
+        glow_color = (*YELLOW[:3], glow_alpha)
+        pygame.draw.line(
+            temp_surface,
+            glow_color,
+            (int(self.start_x), int(screen_start_y)),
+            (int(self.hit_x), int(screen_hit_y)),
+            self.width + 6,
+        )
+
+        surface.blit(temp_surface, (0, 0))
+
+        # 충돌 지점에 임팩트 이펙트
+        if self.hit_something and self.age < 0.05:
+            pygame.draw.circle(
+                surface,
+                self.color,
+                (int(self.hit_x), int(screen_hit_y)),
+                int(10 - self.age * 100),
+                3,
+            )
+
+    def get_rect(self):
+        # 엔티티 리스트 호환용
+        return pygame.Rect(0, 0, 0, 0)
+
 # ═══════════════════════════════════════════════════
 # WEAPON SYSTEM
 # ═══════════════════════════════════════════════════
@@ -789,7 +941,8 @@ class Rifle(Weapon):
         dy = mouse_y - player_screen_y
         angle = math.atan2(dy, dx)
 
-        bullet = Bullet(bullet_x, bullet_y, angle=angle)
+        bullet = LaserBeam(bullet_x, bullet_y, angle)
+        bullet.needs_raycast = True
         bullet.camera = player.camera  # 카메라 참조 전달
         entities.append(bullet)
 
@@ -884,7 +1037,8 @@ class Shotgun(Weapon):
         # 10발의 총알을 스프레드로 발사
         for _ in range(self.pellet_count):
             angle = center_angle + random.uniform(-self.spread_angle, self.spread_angle)
-            bullet = Bullet(bullet_x, bullet_y, angle=angle, speed=700)
+            bullet = LaserBeam(bullet_x, bullet_y, angle)
+            bullet.needs_raycast = True
             bullet.camera = player.camera
             entities.append(bullet)
 
@@ -1061,7 +1215,7 @@ class Player:
 
         # Dive system
         self.dive_cooldown = 0.0  # 현재 쿨다운 시간
-        self.max_dive_cooldown = 4  # 쿨다운 지속시간 (초)
+        self.max_dive_cooldown = 2.5  # 쿨다운 지속시간 (초)
         self.can_dive = True  # 급강하 가능 여부
 
         # Combo system
@@ -1926,6 +2080,11 @@ while BroGaming:
         # Update entities (히트스톱 중에는 업데이트 안 함)
         if leejammin.hitstop_timer <= 0:
             for entity in entities[:]:
+
+                if isinstance(entity, LaserBeam) and hasattr(entity, 'needs_raycast'):
+                    entity.raycast(enemy_spawner.enemies, platformGen.platforms)
+                    delattr(entity, 'needs_raycast')
+
                 # BounceBullet 플랫폼 충돌 체크
                 if isinstance(entity, BounceBullet):
                     entity.check_platform_collision(platformGen.platforms)
