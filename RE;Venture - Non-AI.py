@@ -20,7 +20,7 @@ def sungsoo_wihan_package_downloader(package):
         "Sprites/Object/CompanyLogo.png",
         "Sprites/Object/RE-Venture.png",
         "Font/DNFForgedBlade-Medium.ttf",
-        "5km.png",
+        "Sprites/Backgrounds/5km.png",
         "CutsceneData/cutscene_data.json",
     ]
 
@@ -39,6 +39,7 @@ def sungsoo_wihan_package_downloader(package):
 
             try:
                 urllib.request.urlretrieve(target_url, asset)
+                print(f" {asset} 다운로드 성공")
             except Exception as e:
                 print(f" {asset} 다운로드 실패")
 
