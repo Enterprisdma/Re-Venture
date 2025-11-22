@@ -1,3 +1,17 @@
+'''
+뭐가 AI고 뭐가 사람인지 확실히 봐라
+AI
+- 성수위한패키지다운로드 - 무슨 메소드 써야 하는지 AI가 알려줌
+- 기본적 틀 ( 그리기는 draw 함수로 이름 정해야 일관성 있고 이뻐진다, 게임 루프에서 실시간 반복은 update로 정해야 이뻐진다...)
+- 서브스텝 알고리즘 ( 나눠서 충돌 검사하는거 )
+- UIManager ( 어캐만드냐 )
+
+인간
+- 상태 머신 ( 클래스로 묶어서 관리함 ㅅㄱ -> 게임 루프마다 바꾸면서 상태 변했는지 체크 )
+- json으로 컷씬 관리하기 ( 아이디어 낸 자한테 박수111111 )
+- 플레이어 이동, 플랫폼 생성, 카메라 ( AI가 만든 줄 알었지? - 월드 좌표 / 화면 좌표 개념과 공식은 AI가 알려줌 )
+'''
+
 import subprocess
 import sys
 
@@ -301,6 +315,40 @@ class Camera:
         self.bouncing = True
         self.cycle_duration = 0.25
 
+        self.scroll_active = False
+        self.scrolling_speed = 150
+        self.camera_y = 0
+        self.bg = pygame.image.load("Sprites/Backgrounds/5km.png")
+        self.bg_height = self.bg.get_height()
+
+        self.active = False
+    
+    def bg_cycle(self, surface):
+        bg_y = self.camera_y % self.bg_height
+        surface.blit(self.bg, (0, bg_y))
+        surface.blit(self.bg, (0, bg_y - self.bg_height))
+    
+    def camera_chase(self, delta, player=None):
+        if self.active:
+
+            if self.scroll_active:
+                self.camera_y -= self.scrolling_speed * delta
+
+            if player:
+                border = SCREEN_HEIGHT * 0.65
+                player_screen_y = self.draw_again(player)
+
+                if player_screen_y >= border:
+                    set_y = -(player.y - border)
+                    self.camera_y = set_y
+                
+            if self.scroll_active:
+                self.camera_y -= self.scrolling_speed * delta
+
+    
+    def draw_again(self, entity): # 카메레에 그리기
+        return entity.y + self.camera_y
+
     def update(self, dt):
         if self.bouncing:
             self.timer += dt * self.speed
@@ -314,6 +362,14 @@ class Camera:
         L, t = (sw - w) // 2, (sh - h) // 2
         subs = surf_zoomed.subsurface((L, t, w, h)).copy()
         return subs
+
+def load_sprites(path, size, flip=False):
+    img = pygame.image.load(path)
+    img = pygame.transform.scale(img, size)
+
+    if flip:
+        img = pygame.transform.flip(img, True, False)
+    return img
     
 class Player:
     def __init__(self, x, y):
@@ -321,21 +377,235 @@ class Player:
         self.y = y
         self.x_velocity = 0
         self.y_velocity = 0
-        self.gravity = 1200
-        self.max_fall_speed = 1500
+        self.gravity = 4800
+        self.max_fall_speed = 6000
         self.accel = 0
+        self.is_moving = False
         self.width = 64
         self.height = 64
         self.grounded = False
         self.state = "Normal" # "forcing", "stunned", "sliding"
+        self.bouncing = False
+        self.can_dive = True
         self.facing = 1
         self.iswarped = False
+        self.jump_key_held = False
 
         self.slide_timer = 0
         self.slide_holding = False
         self.sliding_velocity = 5000
 
-        self.weapon_cooldown_list = []
+        self.current_weapon = "rifle"
+
+        self.load_sprites()
+
+    def load_sprites(self):
+        size = (self.width, self.height)
+        self.sprites = {
+            "idle":[load_sprites(f"Sprites/Player/LEEJAMMIN{i}.png", size) for i in range(1, 5)],
+            "falling":[load_sprites("Sprites/Player/LEEJAMMIN5.png", size)],
+            "jumping":[load_sprites("Sprites/Player/LEEJAMMIN6.png", size)],
+            "dagger":[load_sprites("Sprites/Player/LEEJAMMIN7.png", size)],
+            "rifleshoot":[load_sprites("Sprites/Player/LEEJAMMIN8.png", size)],
+            "walking":[load_sprites(f"Sprites/Player/LEEJAMMIN{i}.png", size) for i in range(9, 16)],
+            "sliding":[load_sprites("Sprites/Player/LEEJAMMIN16.png", size)]
+        }
+
+    def jump(self):
+        if self.grounded:
+            self.y_velocity = -1000
+            self.grounded = False
+            self.bouncing = False
+            self.jump_key_held = True
+        
+    def Forcing(self):
+        if self.grounded:
+            self.y_velocity = 0
+            self.bouncing  = True
+            self.state = "Normal"
+            return
+        elif not self.grounded and self.can_dive:
+            self.y_velocity += self.gravity * 0.3
+            self.state = "Forcing"
+            self.slide_cooldown_timer = 0
+            return
+        
+    def input_manager(self, keys):
+        self.is_moving = False
+        self.accel = 0
+        if keys[pygame.K_a] and self.x - self.width >= 0:
+            self.accel = -10000
+            self.is_moving = True
+            self.facing = -1
+        elif keys[pygame.K_d] and self.x + self.width <= SCREEN_WIDTH:
+            self.accel = 10000
+            self.is_moving = True
+            self.facing = 1
+            
+        if keys[pygame.K_SPACE]:
+            if self.grounded:
+                self.jump()
+            elif not self.jump_key_held:
+                self.Forcing()
+                self.jump_key_held = True
+            elif self.y_velocity >= -100: 
+                self.Forcing()
+        else:
+            self.jump_key_held = False
+
+    def check_platform_collision(self, platforms):
+        self.grounded = False
+        player_rect = pygame.Rect(self.x, self.y, self.width, self.height)
+    
+        for platform in platforms:
+            platform_rect = platform.get_rect()
+        
+            overlap = player_rect.bottom - platform_rect.top
+    
+            if player_rect.colliderect(platform_rect):
+                if self.y_velocity > 0 and player_rect.bottom <= platform_rect.top + overlap:
+                    self.y = platform_rect.top - self.height
+                    self.y_velocity = 0
+                    self.grounded = True
+                    return True
+                elif self.y_velocity < 0 and player_rect.top <= platform_rect.bottom + overlap:
+                    self.y = platform_rect.bottom
+                    self.y_velocity = 0
+                    return True
+                else:
+                    return False
+    
+    def update(self, delta, platforms):
+        keys = pygame.key.get_pressed()
+        collision_checking = 8
+        collision_checking_term = delta / collision_checking
+        self.input_manager(keys)
+
+        if not self.grounded:
+            self.y_velocity += self.gravity * delta
+            self.y_velocity = min(self.y_velocity, self.max_fall_speed)
+        
+        self.x_velocity += self.accel * delta
+        self.x_velocity *= 0.9 # 마찰ㄺ
+
+        for _ in range(collision_checking): # Protip - 다운웰 느낌나는 서브스텝 알고리짐
+            self.x += self.x_velocity * collision_checking_term
+            self.y += self.y_velocity * collision_checking_term
+
+            if self.check_platform_collision(platforms):
+                break
+    
+    def draw(self, surface, camera):
+        screen_y = camera.draw_again(self)
+
+        if self.grounded:
+            current_sprite = self.sprites["idle"][0]
+        else:
+            current_sprite = self.sprites["falling"][0]
+        
+        surface.blit(current_sprite, (self.x, screen_y))
+
+# 플랫폼들
+
+class PlatformGen:
+    def __init__(self):
+        self.platforms = []
+        self.last_y = 400
+        self.platforms_pattern = ["Normal", "Normal", "Breakable", "Normal", "Breakable"]
+        self.pointer = 0
+        self.NextPlatform = None
+        self.min_gap_y = 70
+        self.max_gap_y = 170
+        self.min_width = 100
+        self.max_width = 500
+        self.fixed_height = 32
+
+        self.where_width = 0
+        for _ in range(5):
+            self.generate()
+
+    def rotation(self):
+        self.NextPlatform = self.platforms_pattern[self.pointer % 5]
+        self.pointer += 1
+
+    def generate(self):
+        self.last_y += random.randint(self.min_gap_y, self.max_gap_y)
+        self.where_width = random.randint(self.min_width, self.max_width)
+        x = random.randint(0, SCREEN_WIDTH - self.where_width)
+
+        self.rotation()
+
+        if self.NextPlatform == "Normal":
+            self.NextPlatform = NormalPlatform(x, self.last_y, self.where_width, self.fixed_height)
+            self.platforms.append(self.NextPlatform)
+        elif self.NextPlatform == "Breakable":
+            self.NextPlatform = BreakablePlatform(x, self.last_y, self.where_width, self.fixed_height)
+            self.platforms.append(self.NextPlatform)
+    
+    def update(self, camera):
+
+        for i in range(len(self.platforms) - 1, -1, -1):
+            screen_y = self.platforms[i].y + camera.camera_y
+            if screen_y < -100:
+                self.platforms.pop(i)
+        
+        if len(self.platforms) == 0:
+            self.last_y = abs(camera.camera_y) + SCREEN_HEIGHT
+            self.generate()
+        else:
+            last_screen_y = self.platforms[-1].y + camera.camera_y
+            if last_screen_y < SCREEN_HEIGHT + 500:
+                self.generate()
+    
+    def draw(self, camera, surface):
+        for platform in self.platforms[:]:
+            screen_y = camera.draw_again(platform)
+            if isinstance(platform, NormalPlatform):
+                surface.blit(pygame.transform.scale(platform.sprite, (platform.width, platform.height)), (platform.x, screen_y))
+            elif isinstance(platform, BreakablePlatform):
+                surface.blit(
+                    pygame.transform.scale(
+                        platform.sprite, (platform.width, platform.height)
+                    ),
+                    (platform.x, screen_y),
+                )
+
+class PlatformBase:
+    def __init__(self, x, y, width, height):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+
+    def draw(self, surface):
+        pygame.draw.rect(surface, self.sprite, self.get_rect())
+
+class NormalPlatform(PlatformBase):
+    sprite_cash = None
+
+    def __init__(self,x, y, width, height):
+        super().__init__(x, y, width, height)
+        if NormalPlatform.sprite_cash is None:
+            NormalPlatform.sprite_cash = pygame.image.load(
+                "Sprites/Object/Platforms/NormalPlatform/NormalPlatform.png"
+            )
+        self.sprite = NormalPlatform.sprite_cash
+        self.Intgrid = 0
+
+class BreakablePlatform(PlatformBase):
+    sprite_cash = None
+
+    def __init__(self, x, y, width, height):
+        super().__init__(x, y, width, height)
+        if BreakablePlatform.sprite_cash is None:
+            BreakablePlatform.sprite_cash = pygame.image.load(
+                "Sprites/Object/Platforms/BreakablePlatform/BreakablePlatform.png"
+            )
+        self.sprite = BreakablePlatform.sprite_cash
+        self.Intgrid = 1
         
 
 class Game:
@@ -343,7 +613,7 @@ class Game:
         self.clock = pygame.time.Clock()
         self.camera = Camera((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.fading = UIManager(duration=1.0)
-        self.background = pygame.image.load("5km.png")
+        self.background = pygame.image.load("Sprites/Backgrounds/5km.png")
 
         self.world_timer = 0
         self.blink_timer = 0
@@ -356,10 +626,19 @@ class Game:
 
         self.game_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         self.screen_blink = ScreenBlinker(BLACK, 10.0)
+        self.PlatformGenerator = PlatformGen()
+
+        self.camera.active = True
+        self.camera.scroll_active = True
+
+        player_x = SCREEN_WIDTH // 2
+        player_y = SCREEN_HEIGHT // 2
+        self.player = Player(player_x, player_y)
     
     def draw(self, delta):
         self.game_surface.fill(WHITE)
-        self.game_surface.blit(self.background, (0, 0))
+
+        self.camera.bg_cycle(self.game_surface)
 
         if self.screen_blink.active:
             self.screen_blink.update(delta)
@@ -380,6 +659,10 @@ class Game:
             self.blink_timer = 0
             self.screen_blink.reset()
         
+        self.player.update(delta, self.PlatformGenerator.platforms)
+        self.camera.camera_chase(delta, self.player)
+
+        self.PlatformGenerator.update(self.camera)
 
         if self.world_timer <= self.fade_in:
             surface_transparent = self.fading.fadein(delta)
@@ -388,8 +671,9 @@ class Game:
             self.game_surface.set_alpha(255)
 
         self.draw(delta)
-
-        screen.blit(self.game_surface, (0, 0))    
+        self.PlatformGenerator.draw(self.camera, self.game_surface)
+        self.player.draw(self.game_surface, self.camera)
+        screen.blit(self.game_surface, (0, 0))
 
 
 # 보조 클래스

@@ -48,11 +48,13 @@ class Camera:
         self.x = 0
         self.y = 0
         self.scrolling = 100
-        self.bg = pygame.image.load("5km.png")
+        self.bg = pygame.image.load("Sprites/Backgrounds/5km.png")
         self.bg_height = self.bg.get_height()
         self.active = False
-        self.lock_player = False  # 플레이어 추적 플래그
+        self.lock_player = True  # 플레이어 추적 플래그
         self.scroll_acceleration = 200  # 스크롤 가속도
+
+        self.activate()
 
         self.zoom = 1.0  # 기본 줌 레벨 (1.0 = 100%)
         self.target_zoom = 1.0
@@ -74,7 +76,7 @@ class Camera:
             if self.lock_player and player:
                 # DOWNWELL 스타일: 플레이어 추적
                 player_screen_y = self.DrawAgain(player.y)
-                threshold = SCREEN_HEIGHT * 0.5  # 화면 2/4 지점
+                threshold = SCREEN_HEIGHT * 0.75  # 화면 3/4 지점
 
                 # 플레이어가 threshold보다 아래에 있으면 카메라 따라감
                 if player_screen_y > threshold:
@@ -1202,7 +1204,7 @@ class Player:
         self.charge_timer = 0
 
         # Weapons
-        self.weapon_slots = [RocketLauncher(), Shotgun(), Revolver()]
+        self.weapon_slots = [Dagger(), Dagger(), Dagger()]
         self.current_weapon_index = 0  # 현재 장착된 무기
         self.mouse_pos = (0, 0)  # 마우스 위치 저장
         self.camera = None  # 카메라 참조
@@ -1759,18 +1761,6 @@ class PlatformGenerator:
         self.breakablespawn = 40
         self.started = False
 
-        self.create_initial_platforms()
-
-    def create_initial_platforms(self):
-        initial_y = SCREEN_HEIGHT // 4
-        platform_width = SCREEN_WIDTH // 2 - 100
-        height = 20
-
-        left_platform = Platform(0, initial_y, platform_width, height)
-        self.platforms.append(left_platform)
-
-        right_platform = Platform(SCREEN_WIDTH // 2 + 100, initial_y, platform_width, height)
-        self.platforms.append(right_platform)
 
     def generate(self):
         self.last_y += random.randint(self.min_gap_y, self.max_gap_y)
@@ -1787,12 +1777,15 @@ class PlatformGenerator:
         self.platformchoice = random.randint(1, 100)
 
     def update(self, camera_y, player_y, camera):
-        initial_platform_y = SCREEN_HEIGHT // 4
-        if player_y > initial_platform_y + 50 and not self.started:
+        bg_cycles = 2  # 배경 3번
+        spawn_threshold = camera.bg_height * bg_cycles
+        
+        # 플레이어가 배경 3번 지나침 (절대값으로 계산)
+        if abs(camera.y) > spawn_threshold and not self.started:
             self.started = True
-            self.last_y = initial_platform_y
-            camera.activate()
-            camera.lock_player = True  # DOWNWELL 스타일 플레이어 추적 활성화
+            self.last_y = abs(camera.y)  # 현재 카메라 위치에서 시작
+            # 카메라는 이미 활성화되어 있으므로 activate() 불필요
+            camera.lock_player = True
 
         for platform in self.platforms[:]:
             screen_y = platform.y + camera_y
@@ -1976,9 +1969,15 @@ class GameOverScreen:
 # GAME INITIALIZATION
 # ═══════════════════════════════════════════════════
 
-leejammin = Player(SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 4 - 50)
 MainCamera = Camera()
-leejammin.camera = MainCamera  # 플레이어에게 카메라 참조 전달
+MainCamera.activate()  # 카메라 즉시 활성화
+MainCamera.lock_player = True  # 초기에는 플레이어 추적 안 함
+
+# 플레이어를 카메라 y좌표 - 250에 배치
+player_start_x = SCREEN_WIDTH // 2
+player_start_y = abs(MainCamera.y) - 250  # 카메라 위에서 시작
+leejammin = Player(player_start_x, player_start_y)
+leejammin.camera = MainCamera
 platformGen = PlatformGenerator()
 Stage1 = TitleMaker("Stage 1", SCREEN_WIDTH // 2, SCREEN_HEIGHT-150, WHITE)
 Entitle = TitleMaker("Underneath", SCREEN_WIDTH // 2, SCREEN_HEIGHT-200, WHITE)
@@ -2037,6 +2036,11 @@ while BroGaming:
                     game_over_screen.active = False
                     leejammin = Player(SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 4 - 50)
                     MainCamera = Camera()
+                    MainCamera.activate()
+                    MainCamera.lock_player = True
+                    player_start_x = SCREEN_WIDTH // 2
+                    player_start_y = abs(MainCamera.y) - 250
+                    leejammin = Player(player_start_x, player_start_y)
                     leejammin.camera = MainCamera
                     platformGen = PlatformGenerator()
                     entities = []
@@ -2220,7 +2224,9 @@ while BroGaming:
         game_over_screen.draw(screen)
     
     # Game over check (DOWNWELL 스타일: 위로만 벗어나면 게임 오버)
-    if screen_y <= 0 or leejammin.hp <= 0:
+    if screen_y <= 0:
+        leejammin.take_damage(1)
+    if leejammin.hp <= 0:
         if not weapon_selection.active and not game_over:
             game_over = True
             game_over_screen.activate()
