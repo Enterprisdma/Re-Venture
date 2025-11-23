@@ -2,7 +2,22 @@
   "permissions": {
     "allow": [
       "Bash(python:*)",
-      "Bash(wc -l:*)"
+      "Bash(wc -l:*)",
+      "Bash(python3:*)",
+      "Bash(py \"RE;Venture - Non-AI.py\")",
+      "Bash(where:*)",
+      "Bash(/c/msys64/ucrt64/bin/python.exe:*)",
+      "Bash(cmd.exe /c python \"RE;Venture - Non-AI.py\")",
+      "Bash(cmd.exe /c \"python --version\")",
+      "Bash(powershell.exe -Command \"& python ''RE;Venture - Non-AI.py''\")",
+      "Bash(powershell.exe -Command \"Invoke-WebRequest -Uri ''https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe'' -OutFile ''python_installer.exe''\")",
+      "Bash(powershell.exe -Command \"Start-Process -FilePath ''./python_installer.exe'' -ArgumentList ''/quiet InstallAllUsers=1 PrependPath=1 Include_pip=1'' -Wait\")",
+      "Bash(powershell.exe -Command \"refreshenv; python --version\")",
+      "Bash(powershell.exe -Command \"& ''C:\\Program Files\\Python312\\python.exe'' --version\")",
+      "Bash(powershell.exe -Command \"& ''C:\\Program Files\\Python312\\python.exe'' ''RE-Venture_SourceCOde.py''\")",
+      "Bash(powershell.exe -Command \"& ''C:\\Program Files\\Python312\\python.exe'' ''RE;Venture - Non-AI.py''\")",
+      "Bash(taskkill:*)",
+      "Bash(powershell.exe:*)"
     ],
     "deny": [],
     "ask": []

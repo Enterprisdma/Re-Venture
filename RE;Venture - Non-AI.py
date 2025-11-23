@@ -14,6 +14,11 @@ AI
 
 import subprocess
 import sys
+import io
+
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 def sungsoo_wihan_package_downloader(package):
     try:
@@ -33,6 +38,8 @@ def sungsoo_wihan_package_downloader(package):
     assets = [
         "Sprites/Object/CompanyLogo.png",
         "Sprites/Object/RE-Venture.png",
+        "Sprites/Object/Platforms/BreakablePlatform/BreakablePlatform.png",
+        "Sprites/Object/Platforms/NormalPlatform/NormalPlatform.png",
         "Font/DNFForgedBlade-Medium.ttf",
         "Sprites/Backgrounds/5km.png",
         "CutsceneData/cutscene_data.json",
@@ -41,6 +48,7 @@ def sungsoo_wihan_package_downloader(package):
     assets += [f"Sprites/Backgrounds/Main{i}.png" for i in range(1, 5)]
     assets += [f"Sprites/Cutscene/StartCutscene{i}.png" for i in range(1, 3)]
     assets += [f"Sprites/Player/LEEJAMMIN{i}.png" for i in range(1, 17)]
+    assets += [f"Sprites/Enemy/Fire_Robot/Fire_Robot{i}.png" for i in range(1, 11)]
 
     import urllib.request
     import os
@@ -64,6 +72,7 @@ def sungsoo_wihan_package_downloader(package):
 sungsoo_wihan_package_downloader("pygame")
 
 import pygame  # noqa: E402
+import pygame.gfxdraw # noqa: E402
 import math  # noqa: E402
 import json  # noqa: E402
 import random  # noqa: E402
@@ -363,6 +372,8 @@ class Camera:
         subs = surf_zoomed.subsurface((L, t, w, h)).copy()
         return subs
 
+# 플레이어
+
 def load_sprites(path, size, flip=False):
     img = pygame.image.load(path)
     img = pygame.transform.scale(img, size)
@@ -377,14 +388,15 @@ class Player:
         self.y = y
         self.x_velocity = 0
         self.y_velocity = 0
-        self.gravity = 4800
-        self.max_fall_speed = 6000
+        self.gravity = 8000
+        self.max_fall_speed = 10000
         self.accel = 0
         self.is_moving = False
         self.width = 64
         self.height = 64
         self.grounded = False
-        self.state = "Normal" # "forcing", "stunned", "sliding"
+        self.state = "grounded" # "Forcing", "stunned", "sliding", "falling"
+        self.diving = False
         self.bouncing = False
         self.can_dive = True
         self.facing = 1
@@ -413,7 +425,7 @@ class Player:
 
     def jump(self):
         if self.grounded:
-            self.y_velocity = -1000
+            self.y_velocity = -1500
             self.grounded = False
             self.bouncing = False
             self.jump_key_held = True
@@ -422,22 +434,24 @@ class Player:
         if self.grounded:
             self.y_velocity = 0
             self.bouncing  = True
-            self.state = "Normal"
+            self.state = "grounded"
+            self.diving = False
             return
         elif not self.grounded and self.can_dive:
             self.y_velocity += self.gravity * 0.3
-            self.state = "Forcing"
+            self.state = "forcing"
+            self.diving = not self.bouncing
             self.slide_cooldown_timer = 0
             return
         
     def input_manager(self, keys):
         self.is_moving = False
         self.accel = 0
-        if keys[pygame.K_a] and self.x - self.width >= 0:
+        if keys[pygame.K_a]:
             self.accel = -10000
             self.is_moving = True
             self.facing = -1
-        elif keys[pygame.K_d] and self.x + self.width <= SCREEN_WIDTH:
+        elif keys[pygame.K_d]:
             self.accel = 10000
             self.is_moving = True
             self.facing = 1
@@ -453,29 +467,52 @@ class Player:
         else:
             self.jump_key_held = False
 
-    def check_platform_collision(self, platforms):
-        self.grounded = False
+    def check_platform_collision(self, platforms, debris_list):
         player_rect = pygame.Rect(self.x, self.y, self.width, self.height)
     
         for platform in platforms:
             platform_rect = platform.get_rect()
-        
-            overlap = player_rect.bottom - platform_rect.top
-    
+
             if player_rect.colliderect(platform_rect):
-                if self.y_velocity > 0 and player_rect.bottom <= platform_rect.top + overlap:
-                    self.y = platform_rect.top - self.height
-                    self.y_velocity = 0
+                if self.state == "forcing":
+                    self.state = "forcing"
+                else:
+                    self.state = "grounded"
+
+                top_overlap = player_rect.bottom - platform_rect.top
+                bottom_overlap = platform_rect.bottom - player_rect.top
+                left_overlap = player_rect.right - platform_rect.left
+                right_overlap = platform_rect.right - player_rect.left
+
+                real_overlap = min(top_overlap, bottom_overlap, left_overlap, right_overlap)
+    
+                if real_overlap == top_overlap and self.y_velocity >= 0:
+                    if self.state == "forcing" and isinstance(platform, BreakablePlatform):
+                        platform.break_platform(debris_list)
+                        self.y_velocity = -1000
+                        print('OK')
+                        return True
+                    if self.y_velocity > 0:
+                        self.y = platform_rect.top - self.height
+                        self.y_velocity = 0
                     self.grounded = True
+                    self.diving = False
                     return True
-                elif self.y_velocity < 0 and player_rect.top <= platform_rect.bottom + overlap:
+                elif real_overlap == bottom_overlap and self.y_velocity < 0:
                     self.y = platform_rect.bottom
                     self.y_velocity = 0
                     return True
-                else:
-                    return False
+                elif real_overlap == left_overlap and self.x_velocity > 0:
+                    self.x = platform_rect.left - self.width
+                    self.x_velocity = 0
+                    return True
+                elif real_overlap == right_overlap and self.x_velocity < 0:
+                    self.x = platform_rect.right
+                    self.x_velocity = 0
+                    return True
     
-    def update(self, delta, platforms):
+    def update(self, delta, platforms, debrises):
+        print(self.state)
         keys = pygame.key.get_pressed()
         collision_checking = 8
         collision_checking_term = delta / collision_checking
@@ -485,25 +522,351 @@ class Player:
             self.y_velocity += self.gravity * delta
             self.y_velocity = min(self.y_velocity, self.max_fall_speed)
         
+        if not self.grounded and self.y_velocity > 10:
+            self.state = "falling"
+        if self.diving and self.y_velocity > 1000:
+            self.state = "forcing"
+
+        
         self.x_velocity += self.accel * delta
         self.x_velocity *= 0.9 # 마찰ㄺ
+        self.grounded = False
 
-        for _ in range(collision_checking): # Protip - 다운웰 느낌나는 서브스텝 알고리짐
+        for _ in range(collision_checking): # Protip - 다운웰 느낌나는 서브스텝 알고리즘
             self.x += self.x_velocity * collision_checking_term
             self.y += self.y_velocity * collision_checking_term
 
-            if self.check_platform_collision(platforms):
+            if self.check_platform_collision(platforms, debrises):
                 break
+        
+        self.x = max(0, min(self.x, SCREEN_WIDTH - self.width))
     
     def draw(self, surface, camera):
         screen_y = camera.draw_again(self)
 
-        if self.grounded:
+        if self.state == "grounded":
             current_sprite = self.sprites["idle"][0]
         else:
             current_sprite = self.sprites["falling"][0]
         
         surface.blit(current_sprite, (self.x, screen_y))
+
+# 효과들 ( 총알, 파동... )
+
+class PulseWave:
+    def __init__(self, x, y, initial_radius, max_radius, growth_speed, color, filled=False, effect=None):
+        
+        self.x = x
+        self.y = y
+        
+        self.radius = initial_radius
+        self.max_radius = max_radius
+        self.growth_speed = growth_speed
+        
+        self.color = color
+        self.filled = filled
+        self.thickness = 3 if not filled else 0
+        
+        self.active = True
+        self.hit_player = False
+        self.effect = effect if effect else {}
+
+        self.fadeout_manager = UIManager(duration=1)
+        self.alpha = 0
+    
+    def update(self, delta):
+        
+        self.radius += self.growth_speed * delta
+
+        if not self.fadeout_manager.completed:
+            self.alpha = self.fadeout_manager.fadeout(delta)
+        else:
+            self.alpha = 0
+        
+        if self.radius >= self.max_radius:
+            self.active = False
+    
+    def draw(self, surface, camera):
+
+        screen_y = self.y + camera.camera_y
+        
+        if screen_y < -200 or screen_y > SCREEN_HEIGHT + 200:
+            return
+
+        color = (*self.color, self.alpha)
+        
+        if self.filled:
+            pygame.gfxdraw.filled_circle(
+                surface,
+                int(self.x),
+                int(screen_y),
+                int(self.radius),
+                color
+            )
+        else:
+            for i in range(self.thickness):
+                pygame.gfxdraw.circle(
+                    surface,
+                    int(self.x),
+                    int(screen_y),
+                    int(self.radius) - i,
+                    color
+                )
+    
+    def check_collision(self, player):
+        if self.hit_player:
+            return None
+        
+        player_center_x = player.x + player.width // 2
+        player_center_y = player.y + player.height // 2
+        
+        dx = player_center_x - self.x
+        dy = player_center_y - self.y
+        dist = math.hypot(dx, dy)
+         
+        
+        if self.filled:
+            if dist <= self.radius:
+                self.hit_player = True
+                return self.effect
+            else:
+                outline = 30
+                if abs(dist - self.radius) < outline:
+                    self.hit_player = True
+                    return self.effect
+        return None
+    
+    def get_rect(self):
+        return pygame.Rect(
+            self.x - self.radius,
+            self.y - self.radius,
+            self.radius * 2,
+            self.radius * 2
+        )
+
+class Debris:
+    def __init__(self, x, y, velocity_x, velocity_y, size, color):
+        self.x = x
+        self.y = y
+        self.velocity_x = velocity_x
+        self.velocity_y = velocity_y
+        self.size = size
+        self.color = color
+        self.gravity = 2000
+        self.lifetime = 1.0 
+        self.alpha = 255
+    
+    def update(self, delta):
+        self.x += self.velocity_x * delta
+        self.y += self.velocity_y * delta
+        self.velocity_y += self.gravity * delta
+        
+
+        self.lifetime -= delta
+        self.alpha = max(0, int(255 * (self.lifetime / 1.0)))
+    
+    def draw(self, surface, camera):
+        screen_y = self.y + camera.camera_y
+        pygame.draw.rect(
+            surface,
+            self.color,
+            (self.x, screen_y, self.size, self.size)
+        )
+
+# 적들
+
+class Enemy:
+
+    def __init__(self, HP, sprite_size, can_death_instantly, x, y):
+        self.HP = HP
+        self.can_death_instantly = can_death_instantly
+        self.x = x
+        self.y = y
+        self.width, self.height = sprite_size
+        self.state = "active"
+
+        self.sprites = {}
+        self.current_animation = "default"
+        self.animation_frame = 0
+        self.animation_timer = 0
+        self.animation_speed = 0.1
+    
+    def update_animation(self, delta):
+        self.animation_timer += delta
+
+        if self.animation_timer >= self.animation_speed:
+            self.animation_timer = 0
+            self.animation_frame += 1
+
+            if self.current_animation in self.sprites:
+                if self.animation_frame >= len(self.sprites[self.current_animation]):
+                    self.animation_frame = 0
+    
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+
+    def update(self):
+        pass
+    
+    def draw(self, surface, camera):
+        screen_y = camera.draw_again(self)
+
+        if self.current_animation in self.sprites:
+            frames = self.sprites[self.current_animation]
+            if len(frames) > 0 and self.animation_frame < len(frames):
+                current_sprite = frames[self.animation_frame]
+                surface.blit(current_sprite, (self.x, screen_y))
+    
+    def take_damage(self, is_forcing = False):
+        if is_forcing and self.can_death_instantly:
+            self.HP = 0
+        else:
+            return False
+        
+        if self.HP <= 0:
+            self.state = "death_anim_playing"
+            return True
+        else:
+            return False
+    
+    def is_dead(self):
+        return self.HP <= 0
+
+class FireRobot(Enemy):
+    sprite_cash = None
+
+    def __init__(self, HP, sprite_size, can_death_instantly, x, y):
+        super().__init__(HP, sprite_size, can_death_instantly, x, y)
+        self.x_velocity = 600
+        self.y_velocity = 600
+        self.pulse_timer = 0
+        self.pulse_period = 2.0
+        self.pulse_radius = 32.0
+        self.max_pulse_radius = 128.0
+
+        if FireRobot.sprite_cash is None:
+            FireRobot.sprite_cash = {"default":[load_sprites(f"Sprites/Enemy/Fire_Robot/Fire_Robot{i}.png", sprite_size) for i in range(1, 6)],
+                                    "death":[load_sprites(f"Sprites/Enemy/Fire_Robot/Fire_Robot{i}.png", sprite_size) for i in range(6, 11)],}
+
+        self.sprites = FireRobot.sprite_cash
+
+    def update(self, delta, player, pulses=None):
+        dx = player.x - self.x
+        dy = player.y - self.y
+        dist = math.hypot(dx, dy)
+        if dist != 0:
+            self.x += (dx / dist) * self.x_velocity * delta
+            self.y += (dy / dist) * self.y_velocity * delta
+
+        self.pulse_timer += delta
+        if self.pulse_timer >= self.pulse_period:
+            self.pulse_timer = 0
+            if pulses is not None:
+                self.attack_wave(pulses)
+        
+        self.update_animation(delta)
+
+    def attack_wave(self, pulses):
+        effect = {
+            "damage": 1,
+            "knockback": (0, -300),
+            "stun_duration": 0.3
+        }
+    
+        pulse = PulseWave(
+            x = self.x + self.width // 2,
+            y = self.y + self.height // 2,
+            initial_radius = self.pulse_radius,
+            max_radius = self.max_pulse_radius,
+            growth_speed = 200,
+            color = ORANGE,
+            filled = False,
+            effect = effect
+        )
+    
+        pulses.append(pulse)
+
+    def draw(self, surface, camera):
+        super().draw(surface, camera)
+
+class EnemySpawner:
+    def __init__(self):
+        self.enemies = []
+        self.last_y = 600
+        self.next_enemy_pointer = 0
+
+        self.enemy_pattern = ['FireRobot', 'None', 'None']
+
+        self.min_gap_y = 150
+        self.max_gap_y = 500
+
+        self.enemy_data = {
+            "FireRobot": {
+                "size": (64, 128),
+                "hp": 3,
+                "can_instant_death": True,
+                "spawn_type": "air"
+            },
+            "RangedRobot": {
+                "size": (64, 64),
+                "hp": 2,
+                "can_instant_death": True,
+                "spawn_type": "platform"
+            }
+        }
+
+        for _ in range(3):
+            self.generate(None)
+        
+    def rotation(self):
+        pattern_len = len(self.enemy_pattern)
+        self.next_enemy = self.enemy_pattern[self.next_enemy_pointer % pattern_len]
+        self.next_enemy_pointer += 1
+    
+    def generate(self, platforms):
+        self.last_y += random.randint(self.min_gap_y, self.max_gap_y)
+
+        self.rotation()
+        if self.next_enemy == "None":
+            return
+
+        enemy_data = self.enemy_data[self.next_enemy]
+
+        size = enemy_data['size']
+        hp = enemy_data['hp']
+        instant_deathable = enemy_data['can_instant_death']
+        spawn_type = enemy_data['spawn_type']
+
+        if spawn_type == 'air':
+            x = random.randint(100, SCREEN_WIDTH)
+            y = self.last_y
+
+            enemy = FireRobot(hp, size, instant_deathable, x, y)
+
+            self.enemies.append(enemy)
+        
+    def update(self, camera, platforms):
+        for i in range(len(self.enemies) - 1, -1, -1):
+            screen_y = self.enemies[i].y + camera.camera_y
+        
+        if screen_y < -10000:
+            self.enemies.pop(i)
+        
+        for i in range(len(self.enemies) - 1, -1, -1):
+            if self.enemies[i].is_dead():
+                self.enemies.pop(i)
+        
+        if len(self.enemies) == 0:
+            self.last_y = abs(camera.camera_y) + SCREEN_HEIGHT
+            self.generate(platforms)
+        else:
+            last_screen_y = self.enemies[-1].y + camera.camera_y
+            if last_screen_y < SCREEN_HEIGHT + 500:
+                self.generate(platforms)
+    
+    def draw(self, camera, surface):
+        for enemy in self.enemies:
+            enemy.draw(surface, camera)
 
 # 플랫폼들
 
@@ -548,6 +911,9 @@ class PlatformGen:
             screen_y = self.platforms[i].y + camera.camera_y
             if screen_y < -100:
                 self.platforms.pop(i)
+            elif isinstance(self.platforms[i], BreakablePlatform):
+                if self.platforms[i].is_broken():
+                    self.platforms.pop(i)
         
         if len(self.platforms) == 0:
             self.last_y = abs(camera.camera_y) + SCREEN_HEIGHT
@@ -606,7 +972,29 @@ class BreakablePlatform(PlatformBase):
             )
         self.sprite = BreakablePlatform.sprite_cash
         self.Intgrid = 1
+        self.broken = False
+    
+    def break_platform(self, debris_list=None):
+        self.broken = True
         
+        if debris_list is not None:
+            for _ in range(25):
+                debris = Debris(
+                    x = self.x + random.randint(0, self.width),
+                    y = self.y,
+                    velocity_x=random.randint(-200, 200),
+                    velocity_y=random.randint(-500, -200),
+                    size = random.randint(4, 8),
+                    color = GRAY
+                )
+                debris_list.append(debris)
+
+        return True
+
+    def is_broken(self):
+        return self.broken
+
+# 인게임 클래스        
 
 class Game:
     def __init__(self):
@@ -634,6 +1022,10 @@ class Game:
         player_x = SCREEN_WIDTH // 2
         player_y = SCREEN_HEIGHT // 2
         self.player = Player(player_x, player_y)
+
+        self.enemy_spawner = EnemySpawner()
+        self.current_pulses = []
+        self.debrises = []
     
     def draw(self, delta):
         self.game_surface.fill(WHITE)
@@ -659,8 +1051,29 @@ class Game:
             self.blink_timer = 0
             self.screen_blink.reset()
         
-        self.player.update(delta, self.PlatformGenerator.platforms)
+        self.player.update(delta, self.PlatformGenerator.platforms, self.debrises)
         self.camera.camera_chase(delta, self.player)
+        self.enemy_spawner.update(self.camera, self.PlatformGenerator.platforms)
+
+        for enemy in self.enemy_spawner.enemies:
+            if isinstance(enemy, FireRobot):
+                enemy.update(delta, self.player, self.current_pulses)
+            else:
+                enemy.update(delta, self.player)
+        
+        for i in range(len(self.current_pulses) - 1, -1, -1):
+            self.current_pulses[i].update(delta)
+
+            effect = self.current_pulses[i].check_collision(self.player)
+
+            if effect:
+                if "knockback" in effect:
+                    kb_x, kb_y = effect['knockback']
+                    self.player.x_velocity += kb_x
+                    self.player.y_velocity = kb_y
+                
+            if not self.current_pulses[i].active:
+                self.current_pulses.pop(i)
 
         self.PlatformGenerator.update(self.camera)
 
@@ -670,9 +1083,17 @@ class Game:
         else:
             self.game_surface.set_alpha(255)
 
+
         self.draw(delta)
         self.PlatformGenerator.draw(self.camera, self.game_surface)
+        for pulse in self.current_pulses:
+            pulse.draw(self.game_surface, self.camera)
+        self.enemy_spawner.draw(self.camera, self.game_surface)
         self.player.draw(self.game_surface, self.camera)
+        for debris in self.debrises:
+            debris.update(delta)
+            debris.draw(self.game_surface, self.camera)
+        self.debrises = [d for d in self.debrises if d.lifetime > 0]
         screen.blit(self.game_surface, (0, 0))
 
 
