@@ -490,7 +490,6 @@ class Player:
                     if self.state == "forcing" and isinstance(platform, BreakablePlatform):
                         platform.break_platform(debris_list)
                         self.y_velocity = -1000
-                        print('OK')
                         return True
                     if self.y_velocity > 0:
                         self.y = platform_rect.top - self.height
@@ -512,7 +511,6 @@ class Player:
                     return True
     
     def update(self, delta, platforms, debrises):
-        print(self.state)
         keys = pygame.key.get_pressed()
         collision_checking = 8
         collision_checking_term = delta / collision_checking
@@ -524,7 +522,7 @@ class Player:
         
         if not self.grounded and self.y_velocity > 10:
             self.state = "falling"
-        if self.diving and self.y_velocity > 1000:
+        if self.diving and self.y_velocity > 2000:
             self.state = "forcing"
 
         
@@ -540,6 +538,8 @@ class Player:
                 break
         
         self.x = max(0, min(self.x, SCREEN_WIDTH - self.width))
+
+        print(self.y_velocity)
     
     def draw(self, surface, camera):
         screen_y = camera.draw_again(self)
@@ -798,7 +798,7 @@ class EnemySpawner:
 
         self.enemy_data = {
             "FireRobot": {
-                "size": (64, 128),
+                "size": (32, 64),
                 "hp": 3,
                 "can_instant_death": True,
                 "spawn_type": "air"
