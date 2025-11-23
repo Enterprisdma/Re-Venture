@@ -705,9 +705,6 @@ class Enemy:
     def get_rect(self):
         return pygame.Rect(self.x, self.y, self.width, self.height)
 
-    def update(self):
-        pass
-    
     def draw(self, surface, camera):
         screen_y = camera.draw_again(self)
 
@@ -720,14 +717,13 @@ class Enemy:
     def take_damage(self, is_forcing = False):
         if is_forcing and self.can_death_instantly:
             self.HP = 0
-        else:
-            return False
+            return True
         
         if self.HP <= 0:
             self.state = "death_anim_playing"
             return True
-        else:
-            return False
+        
+        return False
     
     def is_dead(self):
         return self.HP <= 0
