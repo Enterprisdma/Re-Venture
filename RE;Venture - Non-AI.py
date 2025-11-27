@@ -12,6 +12,8 @@ AI
 - 플레이어 이동, 플랫폼 생성, 카메라 ( AI가 만든 줄 알었지? - 월드 좌표 / 화면 좌표 개념과 공식은 AI가 알려줌 )
 '''
 
+# 다음 작업 - RangedRobot 클래스 완성하기
+
 import subprocess
 import sys
 import io
@@ -49,6 +51,8 @@ def sungsoo_wihan_package_downloader(package):
     assets += [f"Sprites/Cutscene/StartCutscene{i}.png" for i in range(1, 3)]
     assets += [f"Sprites/Player/LEEJAMMIN{i}.png" for i in range(1, 17)]
     assets += [f"Sprites/Enemy/Fire_Robot/Fire_Robot{i}.png" for i in range(1, 11)]
+    assets += [f"Sprites/Enemy/Ranged_Robot/Ranged_Robot{i}.png" for i in range(1, 27)]
+    assets += [f"Sprites/Entities/Laser/Laser{i}.png" for i in range(1, 11)]
 
     import urllib.request
     import os
@@ -342,6 +346,7 @@ class Camera:
 
             if self.scroll_active:
                 self.camera_y -= self.scrolling_speed * delta
+                print(self.camera_y)
 
             if player:
                 border = SCREEN_HEIGHT * 0.65
@@ -407,6 +412,11 @@ class Player:
         self.slide_holding = False
         self.sliding_velocity = 5000
 
+        self.hp = 6
+        self.invincible = True
+        self.invincible_timer = 0.0
+        self.invincible_duration = 0.5
+
         self.current_weapon = "rifle"
 
         self.load_sprites()
@@ -428,7 +438,10 @@ class Player:
             self.y_velocity = -1500
             self.grounded = False
             self.bouncing = False
-            self.jump_key_held = True
+            if keys[pygame.K_SPACE]:
+                self.jump_key_held = True
+            else:
+                self.jump_key_held = False
         
     def Forcing(self):
         if self.grounded:
@@ -437,7 +450,7 @@ class Player:
             self.state = "grounded"
             self.diving = False
             return
-        elif not self.grounded and self.can_dive:
+        elif not self.grounded and self.can_dive and not self.jump_key_held and self.y_velocity > 0:
             self.y_velocity += self.gravity * 0.3
             self.state = "forcing"
             self.diving = not self.bouncing
@@ -460,16 +473,19 @@ class Player:
             if self.grounded:
                 self.jump()
             elif not self.jump_key_held:
-                self.Forcing()
-                self.jump_key_held = True
-            elif self.y_velocity >= -100: 
+                if not self.invincible:
+                    self.Forcing()
+            elif self.y_velocity >= -1000 and self.jump_key_held: 
                 self.Forcing()
         else:
             self.jump_key_held = False
 
     def check_platform_collision(self, platforms, debris_list):
         player_rect = pygame.Rect(self.x, self.y, self.width, self.height)
-    
+
+        if self.invincible:
+            return False
+
         for platform in platforms:
             platform_rect = platform.get_rect()
 
@@ -488,8 +504,9 @@ class Player:
     
                 if real_overlap == top_overlap and self.y_velocity >= 0:
                     if self.state == "forcing" and isinstance(platform, BreakablePlatform):
-                        platform.break_platform(debris_list)
-                        self.y_velocity = -1000
+                        if self.y_velocity > 0:
+                            platform.break_platform(debris_list)
+                            self.y_velocity = -1000
                         return True
                     if self.y_velocity > 0:
                         self.y = platform_rect.top - self.height
@@ -509,8 +526,21 @@ class Player:
                     self.x = platform_rect.right
                     self.x_velocity = 0
                     return True
+        
+    def take_damage(self, damage):
+        if not self.invincible:
+            self.hp -= damage
+            self.invincible = True
+            self.invincible_timer = self.invincible_duration
     
-    def update(self, delta, platforms, debrises):
+    def update(self, delta, platforms, debrises, camera):
+        screen_y = self.y + camera.camera_y
+
+        if not self.invincible:
+            if screen_y < self.height - 32:
+                self.y = abs(camera.camera_y) + self.height
+                self.take_damage(1)
+
         keys = pygame.key.get_pressed()
         collision_checking = 8
         collision_checking_term = delta / collision_checking
@@ -524,6 +554,11 @@ class Player:
             self.state = "falling"
         if self.diving and self.y_velocity > 2000:
             self.state = "forcing"
+        
+        if self.invincible:
+            self.invincible_timer -= delta
+            if self.invincible_timer <= 0:
+                self.invincible = False
 
         
         self.x_velocity += self.accel * delta
@@ -539,7 +574,6 @@ class Player:
         
         self.x = max(0, min(self.x, SCREEN_WIDTH - self.width))
 
-        print(self.y_velocity)
     
     def draw(self, surface, camera):
         screen_y = camera.draw_again(self)
@@ -549,12 +583,13 @@ class Player:
         else:
             current_sprite = self.sprites["falling"][0]
         
-        surface.blit(current_sprite, (self.x, screen_y))
+        if self.invincible_timer % 0.2 > 0.1:
+            surface.blit(current_sprite, (self.x, screen_y))
 
 # 효과들 ( 총알, 파동... )
 
 class PulseWave:
-    def __init__(self, x, y, initial_radius, max_radius, growth_speed, color, filled=False, effect=None):
+    def __init__(self, x, y, initial_radius, max_radius, thickness, growth_speed, color, filled=False, effect=None):
         
         self.x = x
         self.y = y
@@ -565,7 +600,7 @@ class PulseWave:
         
         self.color = color
         self.filled = filled
-        self.thickness = 3 if not filled else 0
+        self.thickness = thickness if not filled else 0
         
         self.active = True
         self.hit_player = False
@@ -644,6 +679,115 @@ class PulseWave:
             self.radius * 2
         )
 
+class DoomLaser:
+    sprite_cash = None
+
+
+    def __init__(self, x, y, growth_speed, angle, default_height, max_height, effect):
+
+        self.x = x
+        self.y = y
+
+        self.angle = angle
+        self.effect = effect
+
+        self.growth_speed = growth_speed
+        self.default_height = default_height
+        self.max_height = max_height
+
+        self.start_width = 32
+        self.current_width = self.start_width
+        self.max_width = 2500
+
+        self.stretch_timer = 0
+        self.stretch_time = 0.5
+        self.holding_duration = self.stretch_time + 2.0
+        self.disappearing_duration = self.holding_duration + 1.0
+
+        self.state = "releasing"
+        self.frame_timer = 0
+        self.current_frame = 0
+        self.animation_speed = 0.1
+
+        sprite_size = (self.default_height, self.current_width)
+
+        if DoomLaser.sprite_cash is None:
+            DoomLaser.sprite_cash = {
+                "appear": [
+                    load_sprites(
+                        f"Sprites/Entities/Laser/Laser{i}.png", sprite_size
+                    )
+                    for i in range(1, 6)
+                ],
+                "disappear": [
+                    load_sprites(
+                        f"Sprites/Entities/Laser/Laser{i}.png", sprite_size
+                    )
+                    for i in range(6, 11)
+                ]
+            }
+
+        self.sprites = DoomLaser.sprite_cash
+
+    def update(self, delta):
+        self.stretch_timer += delta
+
+        if self.stretch_timer <= self.stretch_time:
+            self.state = 'releasing'
+            self.default_height += self.growth_speed * delta
+            if self.default_height >= self.max_height:
+                self.default_height = self.max_height
+            progress = max(0.0, min(1.0, self.stretch_timer / self.stretch_time))
+            self.current_width = self.start_width + progress * (self.max_width - self.start_width)
+        elif self.stretch_timer <= self.holding_duration:
+            self.state = 'holding'
+            self.current_width = self.max_width
+        elif self.stretch_timer <= self.disappearing_duration:
+            self.state = 'disappearing'
+            elapsed = self.stretch_timer - self.holding_duration
+            duration = self.disappearing_duration - self.holding_duration
+            progress = max(0.0, min(1.0, elapsed / duration))
+            self.current_width = self.start_width + (1-progress) * (
+                self.max_width - self.start_width
+            )
+        else:
+            self.state = 'releasing'
+            self.current_width = 0
+            self.stretch_timer = 0
+
+        
+        self.frame_timer += delta
+        if self.frame_timer >= self.animation_speed:
+            self.frame_timer = 0
+            self.current_frame += 1
+
+            if self.current_frame >= 4:
+                self.current_frame = 4
+    
+    def draw(self, surface, camera):
+        screen_y = self.y + camera.camera_y
+        
+        if self.state == 'releasing' or self.state == 'holding':
+            sprites = self.sprites['appear']
+        elif self.state == 'disappearing' or self.state == 'finished':
+            sprites = self.sprites['disappear']
+
+        frame_index = min(self.current_frame, len(sprites) - 1)
+        width = max(1, int(self.current_width))
+        height = max(1, int(self.default_height))
+    
+        scaled_sprite = pygame.transform.scale(
+            sprites[frame_index], (width, height)
+        )
+
+        degrees = math.degrees(self.angle)
+
+        rotated_sprite = pygame.transform.rotate(scaled_sprite, -degrees)
+        rotated_rect = rotated_sprite.get_rect(center=(self.x, screen_y))
+        surface.blit(rotated_sprite, rotated_rect)
+        
+
+
 class Debris:
     def __init__(self, x, y, velocity_x, velocity_y, size, color):
         self.x = x
@@ -678,6 +822,8 @@ class Debris:
 class Enemy:
 
     def __init__(self, HP, sprite_size, can_death_instantly, x, y):
+
+        self.max_HP = HP
         self.HP = HP
         self.can_death_instantly = can_death_instantly
         self.x = x
@@ -689,7 +835,7 @@ class Enemy:
         self.current_animation = "default"
         self.animation_frame = 0
         self.animation_timer = 0
-        self.animation_speed = 0.1
+        self.animation_speed = 0.05
     
     def update_animation(self, delta):
         self.animation_timer += delta
@@ -713,6 +859,13 @@ class Enemy:
             if len(frames) > 0 and self.animation_frame < len(frames):
                 current_sprite = frames[self.animation_frame]
                 surface.blit(current_sprite, (self.x, screen_y))
+        
+        hp_ratio = self.HP / self.max_HP
+        hpb_width = self.width
+        hpb_height = 4
+
+        pygame.draw.rect(surface, RED, (self.x, screen_y - 8, hpb_width, hpb_height))
+        pygame.draw.rect(surface, GREEN, (self.x, screen_y - 8, hpb_width * hp_ratio, hpb_height))
     
     def take_damage(self, is_forcing = False):
         if is_forcing and self.can_death_instantly:
@@ -746,13 +899,13 @@ class FireRobot(Enemy):
 
         self.sprites = FireRobot.sprite_cash
 
-    def update(self, delta, player, pulses=None):
+    def update(self, delta, player, camera, pulses=None):
         dx = player.x - self.x
         dy = player.y - self.y
         dist = math.hypot(dx, dy)
         if dist != 0:
             self.x += (dx / dist) * self.x_velocity * delta
-            self.y += (dy / dist) * self.y_velocity * delta
+            self.y += (dy / dist) * (self.y_velocity + (camera.scrolling_speed)) * delta
 
         self.pulse_timer += delta
         if self.pulse_timer >= self.pulse_period:
@@ -774,6 +927,7 @@ class FireRobot(Enemy):
             y = self.y + self.height // 2,
             initial_radius = self.pulse_radius,
             max_radius = self.max_pulse_radius,
+            thickness=15,
             growth_speed = 200,
             color = ORANGE,
             filled = False,
@@ -785,13 +939,171 @@ class FireRobot(Enemy):
     def draw(self, surface, camera):
         super().draw(surface, camera)
 
+class RangedRobot(Enemy):
+    sprite_cash = None
+
+    def __init__(self, HP, sprite_size, can_death_instantly, x, y):
+        super().__init__(HP, sprite_size, can_death_instantly, x, y)
+        self.x_velocity = 600
+        self.y_velocity = 600
+        self.laser_period = 1.5
+        self.laser_radius = 32.0
+        self.max_laser_radius = 128.0
+
+        self.timer = 0
+        self.idle_time = 1.0
+        self.ready_time = self.idle_time + 1.0
+        self.fire_time = self.ready_time + 1.0
+
+        self.colideable = True
+        self.GRAVITY = 8000
+
+        self.current_animation = 'default'
+
+        self.laser_fired = False
+
+        if RangedRobot.sprite_cash is None:
+            RangedRobot.sprite_cash = {
+                "default": [
+                    load_sprites(
+                        f"Sprites/Enemy/Ranged_Robot/Ranged_Robot{i}.png", sprite_size
+                    )
+                    for i in range(1, 6)
+                ],
+                "shootready": [
+                    load_sprites(
+                        f"Sprites/Enemy/Ranged_Robot/Ranged_Robot{i}.png", sprite_size
+                    )
+                    for i in range(6, 11)
+                ],
+                "fire": [
+                    load_sprites(
+                        f"Sprites/Enemy/Ranged_Robot/Ranged_Robot{i}.png", sprite_size
+                    )
+                    for i in range(11, 21)
+                ],
+                "death": [
+                    load_sprites(
+                        f"Sprites/Enemy/Ranged_Robot/Ranged_Robot{i}.png", sprite_size
+                    )
+                    for i in range(21, 27)
+                ],
+            }
+
+        self.sprites = RangedRobot.sprite_cash
+
+    def update(self, delta, player, platform, camera, lasers=None):
+
+        self.y_velocity += self.GRAVITY * delta
+
+        self.y += self.y_velocity * delta
+
+        self.moving(platform, camera)
+
+        self.state_cycle(delta)
+
+        if self.current_animation == 'fire':
+            if not self.laser_fired:
+                self.attack_laser(player, lasers)
+                self.laser_fired = True
+        
+        self.update_animation(delta)
+    
+    def state_cycle(self, delta):
+
+        self.timer += delta
+
+        if self.timer <= self.idle_time:
+            self.current_animation = 'default'
+            self.laser_fired = False
+        elif self.timer <= self.ready_time:
+            self.current_animation = 'shootready'
+        elif self.timer <= self.fire_time:
+            self.current_animation = 'fire'
+        else:
+            self.current_animation = 'default'
+            self.laser_fired = False
+            self.timer = 0 
+    
+    def moving(self, platform, camera):
+        self.check_platform_collision(platform)
+    
+    def check_platform_collision(self, platforms):
+        enemy_rect = pygame.Rect(self.x, self.y, self.width, self.height)
+
+        for platform in platforms:
+            platform_rect = platform.get_rect()
+
+            if enemy_rect.colliderect(platform_rect):
+
+                top_overlap = enemy_rect.bottom - platform_rect.top
+                bottom_overlap = platform_rect.bottom - enemy_rect.top
+                left_overlap = enemy_rect.right - platform_rect.left
+                right_overlap = platform_rect.right - enemy_rect.left
+
+                real_overlap = min(
+                    top_overlap, bottom_overlap, left_overlap, right_overlap
+                )
+
+                if real_overlap == top_overlap and self.y_velocity >= 0:
+                    self.y = platform_rect.top - self.height
+                    self.y_velocity = 0
+                    return True
+                elif real_overlap == bottom_overlap and self.y_velocity < 0:
+                    self.y = platform_rect.bottom
+                    self.y_velocity = 0
+                    return True
+                elif real_overlap == left_overlap and self.x_velocity > 0:
+                    self.x = platform_rect.left - self.width
+                    self.x_velocity = 0
+                    return True
+                elif real_overlap == right_overlap and self.x_velocity < 0:
+                    self.x = platform_rect.right
+                    self.x_velocity = 0
+                    return True
+
+    def attack_laser(self, player, lasers):
+        effect = {"damage": 1, "knockback": (0, -300), "stun_duration": 0.3}
+
+        player.current_x = player.x
+        player.current_y = player.y
+
+        angle = math.atan2(player.y - self.y, player.x - self.x)
+
+        if len(lasers) >= 2:
+            lasers.pop(0)
+        
+        laser = DoomLaser(
+            x=self.x + self.width // 2,
+            y=self.y + self.height // 2,
+            default_height=self.laser_radius,
+            max_height=self.max_laser_radius,
+            angle=angle,
+            growth_speed=100,
+            effect=effect
+        )
+
+        lasers.append(laser)
+
+    def draw(self, surface, camera):
+        super().draw(surface, camera)
+
 class EnemySpawner:
     def __init__(self):
         self.enemies = []
         self.last_y = 600
         self.next_enemy_pointer = 0
 
-        self.enemy_pattern = ['FireRobot', 'None', 'None']
+        self.enemy_pattern = [
+            "FireRobot",
+            "None",
+            "None",
+            "None",
+            "None",
+            "None",
+            "None",
+            "RangedRobot",
+        ]
 
         self.min_gap_y = 150
         self.max_gap_y = 500
@@ -811,15 +1123,19 @@ class EnemySpawner:
             }
         }
 
+        self.ranged_count = 0
+
+        self.ranged_robot_unlocked = False
+
         for _ in range(3):
-            self.generate(None)
+            self.generate('default', None)
         
     def rotation(self):
         pattern_len = len(self.enemy_pattern)
         self.next_enemy = self.enemy_pattern[self.next_enemy_pointer % pattern_len]
         self.next_enemy_pointer += 1
     
-    def generate(self, platforms):
+    def generate(self, flag, platforms):
         self.last_y += random.randint(self.min_gap_y, self.max_gap_y)
 
         self.rotation()
@@ -837,28 +1153,67 @@ class EnemySpawner:
             x = random.randint(100, SCREEN_WIDTH)
             y = self.last_y
 
-            enemy = FireRobot(hp, size, instant_deathable, x, y)
+            if self.next_enemy == 'FireRobot':
+                enemy = FireRobot(hp, size, instant_deathable, x, y)
 
             self.enemies.append(enemy)
+        elif spawn_type == 'platform':
+            if platforms is None or len(platforms) == 0:
+                return
+            
+            platform = max(platforms, key=lambda p: p.y)
+            platform_x = platform.x
+            platform_y = platform.y
+            platform_width = platform.width
+
+            enemy_width = size[0]
+            if platform_width > enemy_width:
+                x = random.randint(platform_x, platform_x + platform_width - enemy_width)
+            else:
+                x = platform_x
+            
+            enemy_height = size[1]
+            y = platform_y - enemy_height
+
+            enemy = None
+            if self.next_enemy == 'RangedRobot' and self.ranged_robot_unlocked:
+                ranged_count = 0
+                for e in self.enemies:
+                    if isinstance(e, RangedRobot):
+                        ranged_count += 1
+                if ranged_count >= 2:
+                    return
+                enemy = RangedRobot(hp, size, instant_deathable, x, y)
+            
+            if enemy is not None:
+                self.enemies.append(enemy)
+
+
+
         
-    def update(self, camera, platforms):
+    def update(self, camera, flag, platforms):
+        if flag == 'ranged_robot_appear' and not self.ranged_robot_unlocked:
+            self.ranged_robot_unlocked = True
+
         for i in range(len(self.enemies) - 1, -1, -1):
-            screen_y = self.enemies[i].y + camera.camera_y
-        
-        if screen_y < -10000:
-            self.enemies.pop(i)
-        
-        for i in range(len(self.enemies) - 1, -1, -1):
-            if self.enemies[i].is_dead():
+            enemy = self.enemies[i]
+            screen_y = enemy.y + camera.camera_y
+
+            if screen_y < -2000:
                 self.enemies.pop(i)
+                continue
+            
+            if enemy.is_dead():
+                self.enemies.pop(i)
+                continue
         
         if len(self.enemies) == 0:
             self.last_y = abs(camera.camera_y) + SCREEN_HEIGHT
-            self.generate(platforms)
+            self.generate(flag, platforms)
         else:
             last_screen_y = self.enemies[-1].y + camera.camera_y
             if last_screen_y < SCREEN_HEIGHT + 500:
-                self.generate(platforms)
+                self.generate(flag, platforms)
     
     def draw(self, camera, surface):
         for enemy in self.enemies:
@@ -1021,7 +1376,13 @@ class Game:
 
         self.enemy_spawner = EnemySpawner()
         self.current_pulses = []
+        self.current_lasers = []
         self.debrises = []
+
+        self.depth_checker = DepthChecker()
+        self.current_event = 'default'
+        self.weapon_select_flag = False
+        self.speed_upable = False
     
     def draw(self, delta):
         self.game_surface.fill(WHITE)
@@ -1035,8 +1396,16 @@ class Game:
 
     
     def run(self):
-        delta = clock.tick(FPS) / 1000
+        delta = clock.tick(FPS) / 900
         self.world_timer += delta
+
+        self.current_event, self.weapon_select_flag = self.depth_checker.update(self.camera.camera_y)
+
+        if self.current_event == 'speed_up' and not self.speed_upable:
+            self.speed_upable = True
+            self.camera.scrolling_speed += 50
+        elif not self.current_event == 'speed_up':
+            self.speed_upable = False
 
         if self.world_timer < 10:
             self.blink_timer += delta
@@ -1047,13 +1416,15 @@ class Game:
             self.blink_timer = 0
             self.screen_blink.reset()
         
-        self.player.update(delta, self.PlatformGenerator.platforms, self.debrises)
+        self.player.update(delta, self.PlatformGenerator.platforms, self.debrises, self.camera)
         self.camera.camera_chase(delta, self.player)
-        self.enemy_spawner.update(self.camera, self.PlatformGenerator.platforms)
+        self.enemy_spawner.update(self.camera, self.current_event, self.PlatformGenerator.platforms)
 
         for enemy in self.enemy_spawner.enemies:
             if isinstance(enemy, FireRobot):
-                enemy.update(delta, self.player, self.current_pulses)
+                enemy.update(delta, self.player, self.camera, self.current_pulses)
+            elif isinstance(enemy, RangedRobot):
+                enemy.update(delta, self.player, self.PlatformGenerator.platforms, self.camera, self.current_lasers)
             else:
                 enemy.update(delta, self.player)
         
@@ -1070,6 +1441,13 @@ class Game:
                 
             if not self.current_pulses[i].active:
                 self.current_pulses.pop(i)
+        
+        for i in range(len(self.current_lasers) - 1, -1, -1):
+            laser = self.current_lasers[i]
+            laser.update(delta)
+
+            if laser.state == 'finished' or laser.stretch_timer > laser.disappearing_duration:
+                self.current_lasers.pop(i)
 
         self.PlatformGenerator.update(self.camera)
 
@@ -1084,6 +1462,8 @@ class Game:
         self.PlatformGenerator.draw(self.camera, self.game_surface)
         for pulse in self.current_pulses:
             pulse.draw(self.game_surface, self.camera)
+        for laser in self.current_lasers:
+            laser.draw(self.game_surface, self.camera)
         self.enemy_spawner.draw(self.camera, self.game_surface)
         self.player.draw(self.game_surface, self.camera)
         for debris in self.debrises:
@@ -1091,7 +1471,6 @@ class Game:
             debris.draw(self.game_surface, self.camera)
         self.debrises = [d for d in self.debrises if d.lifetime > 0]
         screen.blit(self.game_surface, (0, 0))
-
 
 # 보조 클래스
 
@@ -1239,6 +1618,34 @@ class ScreenBlinker:
         self.active = True
         self.show_cutscene = False
         self.fading.reset_timer()
+
+class DepthChecker:
+    def __init__(self):
+        self.depth = 0
+        self.event_interval = 5000
+        self.events = [
+            'default',
+            'speed_up',
+            'ranged_robot_appear',
+            'speed_up',
+            'speed_up',
+            '23M-RFT70_Aura',
+            '23M-RFT70_appear',
+            'speed_up',
+            'howling_event',
+            'speed_up',
+            'Dr.R_appear',
+        ]
+    
+    def update(self, camera_y):
+        self.depth = abs(camera_y)
+
+        index = int(self.depth // self.event_interval)
+        if index >= len(self.events):
+            index = len(self.events) - 1
+        
+        return (self.events[index], True)
+
 
 # 인게임
 
