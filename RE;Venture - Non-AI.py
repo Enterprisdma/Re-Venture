@@ -12,7 +12,7 @@ AI
 - 플레이어 이동, 플랫폼 생성, 카메라 ( AI가 만든 줄 알었지? - 월드 좌표 / 화면 좌표 개념과 공식은 AI가 알려줌 )
 '''
 
-# 다음 작업 - RangedRobot 클래스 완성하기
+# 다음 작업 - 플레이어 업그레이드 UI 만들기
 
 import subprocess
 import sys
@@ -431,6 +431,182 @@ def draw_health_hud(surface, player, km):
     km_rect = km_text.get_rect(topleft=(base_x, base_y + cell_height + 15))
     surface.blit(km_text, km_rect)
 
+class UpgradeUI:
+    def __init__(self):
+        self.active = False
+
+        self.choices = []
+        self.selected = None
+
+        self.font_title = pygame.font.Font(None, 32)
+        self.font_upgrade_name = pygame.font.Font("Font/DNFForgedBlade-Medium.ttf", 32)
+        self.font_upgrade_desc = pygame.font.Font("Font/DNFForgedBlade-Medium.ttf", 24)
+        
+        self.input_timer = 0.0
+        self.input_cooldown = 0.05
+
+        self.fade_timer = 0
+        self.fade_manager = UIManager(duration=0.5)
+
+        self.choice_pointer = 0
+
+        self.available_upgrades = [
+            "FocusingSight",
+            "Shotgunning",
+            "DestructiveLaser",
+            "Explosive",
+            "ExtraSlicing",
+            "StylishStomping",
+            "WavingStomp",
+            "Heal",
+            "MechanicalBlood",
+        ]
+    
+    def open(self, exclude_list=None):
+        if exclude_list is None:
+            exclude_list = []
+        self.choices = random.sample(self.available_upgrades, 3)
+        self.selected = None
+        self.active = True
+        self.choice_pointer = 0
+        self.fade_manager.reset_timer()
+    
+    def get_fade_alpha(self, delta):
+
+        if not self.active:
+            return 0
+        
+        val = self.fade_manager.fadein(delta)
+        return val
+    
+    def is_active(self):
+        return self.active
+
+    def update(self, delta):
+        if not self.active:
+            return None
+
+        if self.input_timer > 0:
+            self.input_timer -= delta
+        if self.input_timer <= 0:
+            self.input_timer = 0
+
+        keys = pygame.key.get_pressed()
+
+        if self.input_timer <= 0 and keys[pygame.K_a]:
+            self.choice_pointer -= 1
+            if self.choice_pointer <= 0:
+                self.choice_pointer = 0
+            self.input_timer = self.input_cooldown
+        elif self.input_timer <= 0 and keys[pygame.K_d]:
+            self.choice_pointer += 1
+            if self.choice_pointer >= len(self.choices) - 1:
+                self.choice_pointer = len(self.choices) - 1
+            self.input_timer = self.input_cooldown
+        
+        if keys[pygame.K_RETURN] or keys[pygame.K_SPACE]:
+            if 0 <= self.choice_pointer < len(self.choices):
+                self.selected = self.choices[self.choice_pointer]
+                self.active = False
+                self.input_timer = self.input_cooldown
+                return self.selected
+        
+        return None
+
+    def draw(self, surface):
+        if not self.active:
+            return
+
+        title = self.font_title.render("Choose an Upgrade", True, WHITE)
+        title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 4))
+        surface.blit(title, title_rect)
+
+        card_rects = self.get_card_rects()
+
+        for i, rect in enumerate(card_rects):
+            pygame.draw.rect(surface, (50, 50, 50), rect)
+            pygame.draw.rect(surface, WHITE, rect, 3)
+
+            if i >= len(self.choices):
+                continue
+
+            key = self.choices[i]
+            name_text = self.font_upgrade_name.render(self.get_name(key), True, YELLOW)
+            name_rect = name_text.get_rect(center=(rect.centerx, rect.top + 30))
+            surface.blit(name_text, name_rect)
+
+            for j, line in enumerate(self.get_desc_lines(key)):
+                desc_text = self.font_upgrade_desc.render(line, True, WHITE)
+                desc_rect = desc_text.get_rect(
+                    center=(rect.centerx, rect.top + 70 + j * 28)
+                )
+                surface.blit(desc_text, desc_rect)
+
+        self.draw_pointer(surface, card_rects)
+
+    def draw_pointer(self, surface, card_rects):
+        if not card_rects or self.choice_pointer < 0:
+            return
+        if self.choice_pointer >= len(card_rects):
+            return
+
+        target_rect = card_rects[self.choice_pointer]
+
+        base_height = 30
+        half_h = base_height // 2
+
+        center_y = target_rect.top + 30 
+        center_x = target_rect.left - 40
+
+        p1 = (center_x, center_y - half_h)
+        p2 = (center_x, center_y + half_h)
+        p3 = (center_x + base_height, center_y)
+
+        pygame.draw.polygon(surface, RED, [p1, p2, p3])
+    
+    def get_card_rects(self):
+        card_width = 280
+        card_height = 160
+        gap = 40
+        total_width = card_width * 3 + gap * 2
+        start_x = (SCREEN_WIDTH - total_width) // 2
+        y = SCREEN_HEIGHT // 3
+
+        rects = []
+        for i in range(3):
+            x = start_x + i * (card_width + gap)
+            rects.append(pygame.Rect(x, y, card_width, card_height))
+        return rects
+
+    def get_name(self, key):
+        names = {
+            "FocusingSight": "포커싱 사이트",
+            "Shotgunning": "샷거닝",
+            "DestructiveLaser": "데스트럭티브 레이저",
+            "Explosive": "익스플로시브",
+            "ExtraSlicing": "익스트라 슬라이싱",
+            "StylishStomping": "스타일리쉬 스톰핑",
+            "WavingStomp": "웨이빙 스톰프",
+            "Heal": "회복",
+            "MechanicalBlood": "메카니컬 블러드",
+        }
+        return names.get(key, key)
+
+    def get_desc_lines(self, key):
+        desc = {
+            "FocusingSight": ["단검 레이저의 굵기와", "나아가는 속도가 증가한다."],
+            "Shotgunning": ["단검 레이저 발사 시", "세 갈래로 나간다.", "반동+데미지 추가."],
+            "DestructiveLaser": ["단검 레이저가 일정 확률로", "플랫폼을 파괴한다."],
+            "Explosive": ["단검 레이저 충돌 지점에", "파동이 발생한다."],
+            "ExtraSlicing": ["매우 낮은 확률로", "매우 거대한 레이저 발사."],
+            "StylishStomping": ["스톰핑 시 바운싱이", "최대 3회 억제된다."],
+            "WavingStomp": ["스톰핑 시", "파동이 발생한다."],
+            "Heal": ["HP를 4 회복한다."],
+            "MechanicalBlood": ["적 10회 처치 시", "HP를 1 회복한다."],
+        }
+        return desc.get(key, ["설명 없음"])
+
+
     
 
 class GameOverScreen:
@@ -543,6 +719,7 @@ class Player:
         self.facing = 1
         self.iswarped = False
         self.jump_key_held = False
+        self.input_blocked = False
 
         self.slide_timer = 0
         self.slide_duration = 1
@@ -555,7 +732,10 @@ class Player:
         self.max_hp = 6
         self.invincible = True
         self.invincible_timer = 1
-        self.invincible_duration = 0.5
+        self.invincible_duration = 1
+
+        self.hitstop_timer = 0
+        self.hitstop_duration = 0.5
 
         self.current_animation = 'idle'
         self.animation_frame = 0
@@ -565,6 +745,11 @@ class Player:
         self.weapon = Dagger(cooldown=0.1)
         self.mouse_pos = (0, 0)
         self.camera = None
+
+        self.max_bounce_count = 1
+        self.stomp_wave_enabled = False
+        self.blood_heal_enabled = False
+        self.blood_kill_count = 0
 
         self.load_sprites()
 
@@ -621,6 +806,13 @@ class Player:
         self.weapon.execute_action(self, entities)
         
     def input_manager(self, keys, entities):
+
+        if self.hitstop_timer > 0:
+            return
+        
+        if self.input_blocked:
+            return
+
         self.is_moving = False
         self.accel = 0
         self.mouse_pos = pygame.mouse.get_pos()
@@ -646,16 +838,13 @@ class Player:
             elif not self.jump_key_held:
                 if not self.invincible:
                     self.Forcing()
-            elif self.y_velocity >= -1500 and self.jump_key_held: 
+            elif self.y_velocity >= -500 and self.jump_key_held: 
                 self.Forcing()
         else:
             self.jump_key_held = False
 
     def check_platform_collision(self, platforms, debris_list):
         player_rect = pygame.Rect(self.x, self.y, self.width, self.height)
-
-        if self.invincible:
-            return False
 
         for platform in platforms:
             platform_rect = platform.get_rect()
@@ -702,15 +891,24 @@ class Player:
         return pygame.Rect(self.x, self.y, self.width, self.height)
         
     def take_damage(self, damage):
-        kb_x = 30
-        kb_y = 30
 
-        if not self.invincible:
-            self.hp -= damage
-            self.invincible = True
-            self.invincible_timer = self.invincible_duration
-            self.x += kb_x * self.facing
-            self.y += kb_y * self.facing
+        kb_x = 500
+        kb_y = -1500
+        
+        if self.invincible:
+            return
+
+        self.hp -= damage
+        if self.hp < 0:
+            self.hp = 0
+        
+        self.invincible = True
+        self.invincible_timer = self.invincible_duration
+
+        self.x_velocity = self.facing * kb_x
+        self.y_velocity = kb_y
+
+        self.hitstop_timer = self.hitstop_duration
     
     def update_animation(self, delta):
         previous_animation = self.current_animation
@@ -738,6 +936,11 @@ class Player:
     
     def update(self, delta, platforms, debrises, entities, camera):
         screen_y = self.y + camera.camera_y
+
+        if self.hitstop_timer > 0:
+            self.hitstop_timer -= delta
+            if self.hitstop_timer <= 0:
+                self.hitstop_timer = 0
 
         if not self.invincible:
             if screen_y < self.height - 32:
@@ -808,9 +1011,7 @@ class Player:
             surface.blit(current_sprite, (self.x, screen_y))
         else:
             white_sprite = current_sprite.copy()
-            white_sprite.fill(
-                (255, 255, 255, 128), special_flags=pygame.BLEND_RGBA_MULT
-            )
+            white_sprite.fill(WHITE, special_flags=pygame.BLEND_RGB_ADD)
             surface.blit(white_sprite, (self.x, screen_y))
 
 # 무기
@@ -821,6 +1022,13 @@ class Dagger:
         self.cooldown = cooldown
         self.cooldown_timer = 0
         self.damage = 150
+
+        self.laser_width_multiplier = 1
+        self.shotgun_enabled = False
+        self.destructive_chance = 0.0
+        self.explosive_chance = 0.0
+        self.max_bounce = 0
+        self.extra_slice_chance = 0.0
     
     def update(self, delta):
         
@@ -849,10 +1057,22 @@ class Dagger:
         dy = mouse_y - player_screen_y
         angle = math.atan2(dy, dx)
 
-        laser = LaserBeam(bullet_x, bullet_y, angle, self.damage)
-        laser.needs_raycast = True
-        laser.camera = player.camera
-        entities.append(laser)
+        shotgun_angles = [angle]
+
+        if self.shotgun_enabled:
+            kb = 1000
+            spread = math.radians(30)
+            shotgun_angles = [angle-spread, angle, angle+spread]
+            if 32 + player.width < player.x < SCREEN_HEIGHT - player.width - 32:
+                player.x_velocity -= math.cos(angle) * kb
+            player.y_velocity -= math.sin(angle) * kb
+            self.damage += 20
+
+        for ang in shotgun_angles:
+            laser = LaserBeam(bullet_x, bullet_y, ang, self.damage, camera=player.camera, dagger=self)
+            entities.append(laser)
+            laser.needs_raycast = True
+            laser.camera = player.camera
         
 
 # 엔티티
@@ -939,6 +1159,32 @@ class PulseWave:
                     self.hit_player = True
                     return self.effect
         return None
+
+    def check_collision_enemy(self, enemy):
+        if not self.active:
+            return None
+
+        enemy_rect = enemy.get_rect()
+        enemy_center_x = enemy_rect.centerx
+        enemy_center_y = enemy_rect.centery
+
+        dx = enemy_center_x - self.x
+        dy = enemy_center_y - self.y
+        dist = math.hypot(dx, dy)
+
+        if self.filled:
+            hit = dist <= self.radius
+        else:
+            outline = 30
+            hit = abs(dist - self.radius) < outline
+
+        if hit:
+            dmg = self.effect.get("damage", 0)
+            if dmg > 0:
+                enemy.take_damage(dmg)
+            return self.effect
+
+        return None
     
     def get_rect(self):
         return pygame.Rect(
@@ -966,7 +1212,7 @@ class DoomLaser:
 
         self.start_width = 32
         self.current_width = self.start_width
-        self.max_width = 2500
+        self.max_width = 2200
 
         self.stretch_timer = 0
         self.stretch_time = 0.5
@@ -1002,7 +1248,7 @@ class DoomLaser:
         self.sprites = DoomLaser.sprite_cash
 
     def check_collision(self, player, camera):
-        if self.hit_player or not self.state == 'holding':
+        if self.hit_player or not (self.state == 'holding' or self.state == 'releasing'):
             return None
 
         player_rect = player.get_rect()
@@ -1024,11 +1270,9 @@ class DoomLaser:
         num_steps = int(math.ceil(laser_len / step))
         
         for i in range(num_steps + 1):
-            # Interpolate along the laser's length
             interp = (i / num_steps) - 0.5 if num_steps > 0 else 0
             dist_from_center = interp * laser_len
 
-            # Get world position of the current circle's center
             circle_x = self.x + dist_from_center * dir_x
             world_y = self.y + dist_from_center * dir_y
             screen_y = camera.draw_again(world_y)
@@ -1040,7 +1284,7 @@ class DoomLaser:
             distance_y = screen_y - closest_y
             distance_squared = (distance_x**2) + (distance_y**2)
 
-            if distance_squared < (radius**2):
+            if distance_squared < (radius**2) and player.hitstop_timer <= 0:
                 self.hit_player = True
                 player.take_damage(self.effect.get("damage", 1))
                 return self.effect
@@ -1105,7 +1349,7 @@ class DoomLaser:
         surface.blit(rotated_sprite, self.rect)
 
 class LaserBeam:
-    def __init__(self, start_x, start_y, angle, damage, max_length=2000, camera=None):
+    def __init__(self, start_x, start_y, angle, damage, max_length=2000, camera=None, dagger=None):
         self.start_x = start_x
         self.start_y = start_y
         self.damage = damage
@@ -1123,13 +1367,21 @@ class LaserBeam:
         self.age = 0
         self.active = True
         self.width = 4
+        if dagger is not None:
+            self.width *= dagger.laser_width_multiplier
+            self.platform_destroy_chance = dagger.destructive_chance
+            self.explosive_chance = dagger.explosive_chance
+        else:
+            self.platform_destroy_chance = 0.0
+            self.explosive_chance = 0.0
+
         self.color = WHITE
 
         self.raycast_done = False
         self.hit_something = False
         self.enemy_damaged = False
 
-    def raycast(self, enemies, platforms):
+    def raycast(self, enemies, platforms, pulses=None):
         if self.raycast_done:
             return
 
@@ -1155,19 +1407,36 @@ class LaserBeam:
 
             if distance and distance < closest_distance:
                 closest_distance = distance
-                hit_target = None
+                hit_target = platform
 
         if hit_target and isinstance(hit_target, Enemy) and not self.enemy_damaged:
             hit_target.take_damage(self.damage)
             self.enemy_damaged = True
+        
+        if hit_target and isinstance(hit_target, PlatformBase) and self.platform_destroy_chance >= random.random():
+            hit_target.break_platform(debris_list=None)
 
         dir_x = math.cos(self.angle)
         dir_y = math.sin(self.angle)
         self.hit_x = self.start_x + dir_x * closest_distance
         self.hit_y = self.start_y + dir_y * closest_distance
         self.hit_something = (closest_distance < self.max_length)
-        
         self.raycast_done = True
+
+        if self.hit_something and self.explosive_chance >= random.random():
+            effect = {"damage" : 50}
+            pulse = PulseWave(
+                x=self.hit_x,
+                y=self.hit_y,
+                initial_radius=10,
+                max_radius=200,
+                thickness=10,
+                growth_speed=400,
+                color=WHITE,
+                filled=False,
+                effect=effect,
+            )
+            pulses.append(pulse)
 
     def line_rect_intersection(self, x1, y1, x2, y2, rect):
         dx = x2 - x1
@@ -1372,7 +1641,7 @@ class FireRobot(Enemy):
             initial_radius = self.pulse_radius,
             max_radius = self.max_pulse_radius,
             thickness=15,
-            growth_speed = 200,
+            growth_speed = 300,
             color = ORANGE,
             filled = False,
             effect = effect
@@ -1392,7 +1661,7 @@ class RangedRobot(Enemy):
         self.y_velocity = 600
         self.laser_period = 1.5
         self.laser_radius = 32.0
-        self.max_laser_radius = 128.0
+        self.max_laser_radius = 200.0
 
         self.timer = 0
         self.idle_time = 1.0
@@ -1555,7 +1824,7 @@ class EnemySpawner:
         self.enemy_data = {
             "FireRobot": {
                 "size": (32, 64),
-                "hp": 150,
+                "hp": 200,
                 "can_instant_death": False,
                 "spawn_type": "air"
             },
@@ -1719,6 +1988,9 @@ class PlatformGen:
             elif isinstance(self.platforms[i], BreakablePlatform):
                 if self.platforms[i].is_broken():
                     self.platforms.pop(i)
+            elif isinstance(self.platforms[i], NormalPlatform):
+                if self.platforms[i].is_broken():
+                    self.platforms.pop(i)
         
         if len(self.platforms) == 0:
             self.last_y = abs(camera.camera_y) + SCREEN_HEIGHT
@@ -1764,7 +2036,27 @@ class NormalPlatform(PlatformBase):
                 "Sprites/Object/Platforms/NormalPlatform/NormalPlatform.png"
             )
         self.sprite = NormalPlatform.sprite_cash
-        self.Intgrid = 0
+        self.broken = False
+    
+    def break_platform(self, debris_list=None):
+        self.broken = True
+        
+        if debris_list is not None:
+            for _ in range(25):
+                debris = Debris(
+                    x = self.x + random.randint(0, self.width),
+                    y = self.y,
+                    velocity_x=random.randint(-200, 200),
+                    velocity_y=random.randint(-500, -200),
+                    size = random.randint(4, 8),
+                    color = GRAY
+                )
+                debris_list.append(debris)
+
+        return True
+
+    def is_broken(self):
+        return self.broken
 
 class BreakablePlatform(PlatformBase):
     sprite_cash = None
@@ -1840,6 +2132,11 @@ class Game:
         self.weapon_select_flag = False
         self.speed_upable = False
 
+        self.in_upgrade = False
+        self.upgrade_shown_depths = set()
+        self.selected_upgrades = []
+        self.upgrade_ui = UpgradeUI()
+
         self.max_combo = 0
         self.current_combo = 0
 
@@ -1856,14 +2153,116 @@ class Game:
             self.screen_blink.draw(self.game_surface)
         
         self.depth_checker.draw_alert(self.game_surface)
-
-
     
+    def start_upgrade_UI(self, depth_marker):
+        self.in_upgrade = True
+        self.upgrade_shown_depths.add(depth_marker)
+        self.upgrade_ui.open(exclude_list=self.selected_upgrades)
+        self.camera.scroll_active = False
+        self.player.input_blocked = True
+
+        self.upgrade_start_depth = self.depth_checker.depth
+        self.depth_checker.active = False
+    
+    def update_in_upgrade_phase(self, delta):
+        self.player.update(delta, self.PlatformGenerator.platforms, self.debrises, self.current_attacks, self.camera)
+        self.camera.camera_chase(delta, self.player)
+
+        self.depth_checker.update(delta, self.camera.camera_y)
+
+        choice = self.upgrade_ui.update(delta)
+
+        if choice is not None:
+            self.apply_upgrade(choice)
+            self.depth_checker.depth = self.upgrade_start_depth
+            self.camera.camera_y = -self.upgrade_start_depth
+            self.player.y = abs(self.camera.camera_y) + SCREEN_HEIGHT * 0.65
+            self.player.input_blocked = False
+
+            self.in_upgrade = False
+            self.camera.scroll_active = True
+            self.depth_checker.active = True
+            if self.player.hp < self.player.max_hp:
+                self.player.hp += 1
+    
+    def draw_in_upgrade_phase(self, delta):
+        self.game_surface.fill(WHITE)
+        self.camera.bg_cycle(self.game_surface)
+
+        self.PlatformGenerator.draw(self.camera, self.game_surface)
+        for pulse in self.current_pulses:
+            pulse.draw(self.game_surface, self.camera)
+        for laser in self.current_lasers:
+            laser.draw(self.game_surface, self.camera)
+        self.enemy_spawner.draw(self.camera, self.game_surface)
+
+        transparent = self.upgrade_ui.get_fade_alpha(delta)
+        dim = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+
+        dim.fill(BLACK)
+        dim.set_alpha(transparent)
+        self.game_surface.blit(dim, (0, 0))
+
+        self.player.draw(self.game_surface, self.camera)
+
+        self.upgrade_ui.draw(self.game_surface)
+
+    def apply_upgrade(self, upgrade_name):
+        self.selected_upgrades.append(upgrade_name)
+
+        if upgrade_name == "FocusingSight":
+            self.player.weapon.laser_width_multiplier= 4
+            self.player.weapon.cooldown = 0.05
+
+        elif upgrade_name == "Shotgunning":
+            self.player.weapon.shotgun_enabled = True
+
+        elif upgrade_name == "DestructiveLaser":
+            self.player.weapon.destructive_chance = 0.3
+
+        elif upgrade_name == "Explosive":
+            self.player.weapon.explosive_chance = 0.4
+
+        elif upgrade_name == "Bouncing":
+            self.player.weapon.max_bounce += 1
+
+        elif upgrade_name == "ExtraSlicing":
+            self.player.weapon.extra_slice_chance += 0.01
+
+        elif upgrade_name == "StylishStomping":
+            self.player.max_bounce_count = 3
+
+        elif upgrade_name == "WavingStomp":
+            self.player.stomp_wave_enabled = True
+
+        elif upgrade_name == "Heal":
+            self.player.hp = min(self.player.max_hp, self.player.hp + 4)
+
+        elif upgrade_name == "MechanicalBlood":
+            self.player.blood_heal_enabled = True
+            self.player.blood_kill_count = 0
+
     def run(self):
         delta = clock.tick(FPS) / 900
+
+        if self.in_upgrade:
+            self.update_in_upgrade_phase(delta)
+            self.draw_in_upgrade_phase(delta)
+            screen.blit(self.game_surface, (0, 0))
+            return
+
         self.world_timer += delta
 
         self.current_event, self.weapon_select_flag, pattern_change = self.depth_checker.update(delta, self.camera.camera_y)
+
+        upgrade_trigger_per_depth = 15000
+        upgrade_triggered_per_depth = int(self.depth_checker.depth // upgrade_trigger_per_depth)
+
+        if not self.in_upgrade and upgrade_triggered_per_depth > 0:
+            for marker in range(1, upgrade_triggered_per_depth + 1):
+                if marker not in self.upgrade_shown_depths:
+                    self.start_upgrade_UI(marker)
+                    break
 
         if pattern_change:
             if pattern_change.get("enemy_pattern") is not None:
@@ -1892,60 +2291,66 @@ class Game:
             self.screen_blink.reset()
         
         self.player.update(delta, self.PlatformGenerator.platforms, self.debrises, self.current_attacks, self.camera)
-        self.camera.camera_chase(delta, self.player)
-        self.enemy_spawner.update(self.camera, self.current_event, self.PlatformGenerator.platforms)
+        
+        if self.player.hitstop_timer <= 0:
+            self.camera.camera_chase(delta, self.player)
+            self.enemy_spawner.update(self.camera, self.current_event, self.PlatformGenerator.platforms)
 
-        for attacks in self.current_attacks[:]:
-            if isinstance(attacks, LaserBeam):
-                attacks.update(delta)
-                if not attacks.active:
-                    self.current_attacks.remove(attacks)
-                    continue
-                attacks.raycast(self.enemy_spawner.enemies, self.PlatformGenerator.platforms)
+            for attacks in self.current_attacks[:]:
+                if isinstance(attacks, LaserBeam):
+                    attacks.update(delta)
+                    if not attacks.active:
+                        self.current_attacks.remove(attacks)
+                        continue
+                    attacks.raycast(self.enemy_spawner.enemies, self.PlatformGenerator.platforms, self.current_pulses)
 
-        for enemy in self.enemy_spawner.enemies:
-            if isinstance(enemy, FireRobot):
-                enemy.update(delta, self.player, self.camera, self.current_pulses)
-            elif isinstance(enemy, RangedRobot):
-                enemy.update(delta, self.player, self.PlatformGenerator.platforms, self.camera, self.current_lasers)
-            else:
-                enemy.update(delta, self.player)
-            
-            if self.player.get_rect().colliderect(enemy.get_rect()):
-                if self.player.state == 'forcing' and enemy.can_death_instantly:
-                    enemy.take_damage(1, is_forcing=True)
+            for enemy in self.enemy_spawner.enemies:
+                if isinstance(enemy, FireRobot):
+                    enemy.update(delta, self.player, self.camera, self.current_pulses)
+                elif isinstance(enemy, RangedRobot):
+                    enemy.update(delta, self.player, self.PlatformGenerator.platforms, self.camera, self.current_lasers)
                 else:
-                    self.player.take_damage(1)
+                    enemy.update(delta, self.player)
+            
+                if self.player.get_rect().colliderect(enemy.get_rect()):
+                    if self.player.state == 'forcing' and enemy.can_death_instantly:
+                        enemy.take_damage(1, is_forcing=True)
+                    elif self.player.hitstop_timer <= 0:
+                        self.player.take_damage(1)
         
-        for i in range(len(self.current_pulses) - 1, -1, -1):
-            self.current_pulses[i].update(delta)
+            for i in range(len(self.current_pulses) - 1, -1, -1):
+                self.current_pulses[i].update(delta)
 
-            effect = self.current_pulses[i].check_collision(self.player)
+                effect = self.current_pulses[i].check_collision(self.player)
 
-            if effect:
-                if "knockback" in effect:
-                    kb_x, kb_y = effect['knockback']
-                    self.player.x_velocity += kb_x
-                    self.player.y_velocity += kb_y
+                if effect:
+                    if "knockback" in effect:
+                        kb_x, kb_y = effect['knockback']
+                        self.player.x_velocity += kb_x
+                        self.player.y_velocity += kb_y
                 
-            if not self.current_pulses[i].active:
-                self.current_pulses.pop(i)
+                for enemy in self.enemy_spawner.enemies:
+                    for pulse in self.current_pulses:
+                        pulse.check_collision_enemy(enemy)
+                
+                if not self.current_pulses[i].active:
+                    self.current_pulses.pop(i)
         
-        for i in range(len(self.current_lasers) - 1, -1, -1):
-            laser = self.current_lasers[i]
-            laser.update(delta)
+            for i in range(len(self.current_lasers) - 1, -1, -1):
+                laser = self.current_lasers[i]
+                laser.update(delta)
 
-            effect = laser.check_collision(self.player, self.camera)
-            if effect:
-                if "knockback" in effect:
-                    kb_x, kb_y = effect['knockback']
-                    self.player.x_velocity += kb_x
-                    self.player.y_velocity += kb_y
+                effect = laser.check_collision(self.player, self.camera)
+                if effect:
+                    if "knockback" in effect:
+                        kb_x, kb_y = effect['knockback']
+                        self.player.x_velocity += kb_x
+                        self.player.y_velocity += kb_y
 
-            if laser.state == 'finished' or laser.stretch_timer > laser.disappearing_duration:
-                self.current_lasers.pop(i)
+                if laser.state == 'finished' or laser.stretch_timer > laser.disappearing_duration:
+                    self.current_lasers.pop(i)
 
-        self.PlatformGenerator.update(self.camera)
+            self.PlatformGenerator.update(self.camera)
 
         if self.world_timer <= self.fade_in:
             surface_transparent = self.fading.fadein(delta)
@@ -1970,7 +2375,7 @@ class Game:
             debris.draw(self.game_surface, self.camera)
         self.debrises = [d for d in self.debrises if d.lifetime > 0]
         if not game_over:
-            draw_health_hud(self.game_surface, self.player, abs(self.camera.camera_y) / 10000)
+            draw_health_hud(self.game_surface, self.player, abs(self.depth_checker.depth) / 10000)
         screen.blit(self.game_surface, (0, 0))
 
 
@@ -2149,46 +2554,48 @@ class DepthChecker:
         self.current_alert_text = ''
         self.show_alert = False
 
+        self.active = True
+
         with open('CutsceneData/depth_list.json', 'r') as f:
             self.depth_list = json.load(f)
         self.depth_list = sorted([(int(k), v) for k, v in self.depth_list.items()], key=lambda x: x[0])
         self.pattern_index = -1
 
     def update(self, delta, camera_y):
-        self.depth = abs(camera_y)
 
-        index = int(self.depth // self.event_interval)
-        if index >= len(self.events):
-            index = len(self.events) - 1
-        
-        current_event = self.events[index]
+        if self.active:
+            self.depth = abs(camera_y)
 
-        if not index == self.previous_event_index:
-            self.current_alert_text = current_event
-            self.show_alert = True
-            self.alert_text_timer = self.alert_text_duration
-            self.previous_event_index = index
+            index = int(self.depth // self.event_interval)
+            if index >= len(self.events):
+                index = len(self.events) - 1
         
-        if self.alert_text_timer > 0:
-            self.alert_text_timer -= delta
-            if self.alert_text_timer <= 0:
-                self.show_alert = False
+            current_event = self.events[index]
 
-        pattern_change = None
+            if not index == self.previous_event_index:
+                self.current_alert_text = current_event
+                self.show_alert = True
+                self.alert_text_timer = self.alert_text_duration
+                self.previous_event_index = index
         
-        next_idx = self.pattern_index + 1
-        if next_idx < len(self.depth_list):
-            next_check_depth, next_data = self.depth_list[next_idx]
-            if self.depth >= next_check_depth:
-                self.pattern_index = next_idx
-                pattern_change = {
-                    "enemy_pattern": next_data.get("enemy_pattern"),
-                    "platform_pattern": next_data.get("platform_pattern")
-                }
-        
-        
+            if self.alert_text_timer > 0:
+                self.alert_text_timer -= delta
+                if self.alert_text_timer <= 0:
+                    self.show_alert = False
 
-        return (self.events[index], True, pattern_change)
+            pattern_change = None
+        
+            next_idx = self.pattern_index + 1
+            if next_idx < len(self.depth_list):
+                next_check_depth, next_data = self.depth_list[next_idx]
+                if self.depth >= next_check_depth:
+                    self.pattern_index = next_idx
+                    pattern_change = {
+                        "enemy_pattern": next_data.get("enemy_pattern"),
+                        "platform_pattern": next_data.get("platform_pattern")
+                    }
+        
+            return (self.events[index], True, pattern_change)
 
     def draw_alert(self, screen):
         if not self.show_alert:
@@ -2243,7 +2650,7 @@ while not current_state == GameState.EXIT:
         if event.type == pygame.QUIT:
             current_state = GameState.EXIT
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1 and current_state == GameState.PLAYING and not game_over:
+            if event.button == 1 and current_state == GameState.PLAYING and not game_over and Ingame.player.hitstop_timer <= 0:
                 Ingame.player.use_weapon(Ingame.current_attacks)
                 
         if event.type == pygame.KEYDOWN:
