@@ -19,8 +19,8 @@ import sys
 import io
 
 if sys.platform == 'win32':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', line_buffering=True)
 
 def sungsoo_wihan_package_downloader(package):
     try:
@@ -104,9 +104,7 @@ ORANGE = (255, 165, 0)
 PURPLE = (150, 0, 200)
 CYAN = (0, 255, 255)
 
-# 메인 클래스
-
-# UI들
+# UI
 
 class LogoShow:
     def __init__(self):
@@ -346,7 +344,6 @@ class Camera:
 
             if self.scroll_active:
                 self.camera_y -= self.scrolling_speed * delta
-                print(self.camera_y)
 
             if player:
                 border = SCREEN_HEIGHT * 0.65
@@ -360,8 +357,11 @@ class Camera:
                 self.camera_y -= self.scrolling_speed * delta
 
     
-    def draw_again(self, entity): # 카메레에 그리기
-        return entity.y + self.camera_y
+    def draw_again(self, entity):
+        if isinstance(entity, (int, float)):
+            return entity + self.camera_y
+        else:
+            return entity.y + self.camera_y
 
     def update(self, dt):
         if self.bouncing:
@@ -376,6 +376,142 @@ class Camera:
         L, t = (sw - w) // 2, (sh - h) // 2
         subs = surf_zoomed.subsurface((L, t, w, h)).copy()
         return subs
+
+def draw_health_hud(surface, player, km):
+    base_x = 20
+    base_y = 30
+
+    cell_width = 40
+    cell_height = 25
+    cell_gap = 4
+
+    total_width = cell_width * 6 + cell_gap * 5
+
+    start_x = base_x
+
+    bg_rect = pygame.Rect(start_x - 5, base_y - 5, total_width + 10, cell_height + 10)
+
+    if player.invincible_timer > 0:
+        bg_color = (100, 100, 0)  # 노란빛 배경
+        border_color = YELLOW
+    else:
+        bg_color = (40, 40, 40)
+        border_color = WHITE
+
+    pygame.draw.rect(surface, bg_color, bg_rect)
+    pygame.draw.rect(surface, border_color, bg_rect, 3)
+
+    for i in range(6):
+        cell_x = start_x + i * (cell_width + cell_gap)
+        cell_rect = pygame.Rect(cell_x, base_y, cell_width, cell_height)
+
+        if i < player.hp:
+            color = RED
+        else:
+            color = (60, 60, 60)
+
+        pygame.draw.rect(surface, color, cell_rect)
+        pygame.draw.rect(surface, border_color, cell_rect, 2)
+
+    font = pygame.font.Font(None, 32)
+    hp_text = font.render(f"{player.hp}/{player.max_hp}", True, WHITE)
+    text_rect = hp_text.get_rect(
+        center=(start_x + total_width // 2, base_y + cell_height // 2)
+    )
+
+    text_bg = pygame.Rect(
+        text_rect.x - 3, text_rect.y - 1, text_rect.width + 6, text_rect.height + 2
+    )
+    pygame.draw.rect(surface, BLACK, text_bg)
+
+    surface.blit(hp_text, text_rect)
+    
+    km_font = pygame.font.Font(None, 24)
+    km_text = km_font.render(f"KM: {km:.1f}s", True, YELLOW)
+    km_rect = km_text.get_rect(topleft=(base_x, base_y + cell_height + 15))
+    surface.blit(km_text, km_rect)
+
+    
+
+class GameOverScreen:
+    def __init__(self):
+        self.title_font = pygame.font.Font(None, 72)
+        self.max_combo_font = pygame.font.Font(None, 36)
+        self.max_location_font = pygame.font.Font(None, 36)
+
+        self.rectangular_height = 0
+        self.max_height = SCREEN_HEIGHT
+        self.rectangular_width = SCREEN_WIDTH // 3
+        self.skew_offset = 100
+
+        self.expand_speed = 1000
+
+        self.max_combo = 0
+        self.max_location = 0
+
+        self.show_text = True
+
+    def update(self, delta, max_combo, max_location):
+
+        self.max_combo = max_combo
+        self.max_location = max_location
+
+        if self.rectangular_height < self.max_height:
+            self.rectangular_height += self.expand_speed * delta
+    
+    def draw(self, surface):
+        
+        surface.fill(BLACK)
+
+        if self.rectangular_height > 0:
+            point = [
+                (SCREEN_WIDTH // 2 - self.rectangular_width // 2 + self.skew_offset, 0),
+                (SCREEN_WIDTH // 2 + self.rectangular_width // 2 + self.skew_offset, 0),
+                (
+                    SCREEN_WIDTH // 2 + self.rectangular_width // 2 - self.skew_offset,
+                    self.rectangular_height,
+                ),
+                (
+                    SCREEN_WIDTH // 2 - self.rectangular_width // 2 - self.skew_offset,
+                    self.rectangular_height,
+                ),
+            ]
+            pygame.draw.polygon(surface, WHITE, point)
+        
+        if self.rectangular_height >= self.max_height:
+            title_text = self.title_font.render("Game Over", True, BLACK)
+            title_rect = title_text.get_rect(center=(SCREEN_WIDTH // 3 + 250, SCREEN_HEIGHT // 3))
+            surface.blit(title_text, title_rect)
+
+            combo_text = self.max_combo_font.render(f"Max Combo: {self.max_combo}", True, BLACK)
+            combo_rect = combo_text.get_rect(
+                center=(SCREEN_WIDTH // 3 + 200, SCREEN_HEIGHT // 3 + 100)
+            )
+            surface.blit(combo_text, combo_rect)
+
+            location_text = self.max_location_font.render(f"Max Location: {self.max_location:.2f}KM", True, BLACK)
+            location_rect = location_text.get_rect(
+                center=(
+                    SCREEN_WIDTH // 3 + 170,
+                    SCREEN_HEIGHT // 3 + 150,
+                )
+            )
+            surface.blit(location_text, location_rect)
+
+            if self.show_text:
+                restart_text = self.max_combo_font.render(
+                    "Press R to Restart", True, BLACK
+                )
+                restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH // 2, 500))
+                surface.blit(restart_text, restart_rect)
+
+    def reset(self):
+        self.active = False
+        self.parallelogram_height = 0
+        self.max_combo = 0
+        self.max_height = 0
+        self.blink_timer = 0
+        self.show_text = True
 
 # 플레이어
 
@@ -393,14 +529,14 @@ class Player:
         self.y = y
         self.x_velocity = 0
         self.y_velocity = 0
-        self.gravity = 8000
-        self.max_fall_speed = 10000
+        self.gravity = 6000
+        self.max_fall_speed = 8000
         self.accel = 0
         self.is_moving = False
         self.width = 64
         self.height = 64
         self.grounded = False
-        self.state = "grounded" # "Forcing", "stunned", "sliding", "falling"
+        self.state = "grounded" # "Forcing", "stunned", "sliding", "falling", 'walking'
         self.diving = False
         self.bouncing = False
         self.can_dive = True
@@ -409,15 +545,26 @@ class Player:
         self.jump_key_held = False
 
         self.slide_timer = 0
+        self.slide_duration = 1
         self.slide_holding = False
-        self.sliding_velocity = 5000
+        self.sliding_velocity = 2000
+        self.slide_cooldown_timer = 0
+        self.slide_cooldown = 0.5
 
         self.hp = 6
+        self.max_hp = 6
         self.invincible = True
-        self.invincible_timer = 0.0
+        self.invincible_timer = 1
         self.invincible_duration = 0.5
 
-        self.current_weapon = "rifle"
+        self.current_animation = 'idle'
+        self.animation_frame = 0
+        self.animation_timer = 0
+        self.animation_speed = 0.1
+
+        self.weapon = Dagger(cooldown=0.1)
+        self.mouse_pos = (0, 0)
+        self.camera = None
 
         self.load_sprites()
 
@@ -437,11 +584,10 @@ class Player:
         if self.grounded:
             self.y_velocity = -1500
             self.grounded = False
+            self.current_animation = "jumping"
+            self.state = 'jumping'
             self.bouncing = False
-            if keys[pygame.K_SPACE]:
-                self.jump_key_held = True
-            else:
-                self.jump_key_held = False
+            self.jump_key_held = True
         
     def Forcing(self):
         if self.grounded:
@@ -456,10 +602,29 @@ class Player:
             self.diving = not self.bouncing
             self.slide_cooldown_timer = 0
             return
+    
+    def sliding(self):
+        if not self.slide_holding:
+            self.current_animation = "sliding"
+            self.slide_timer = self.slide_duration
+            self.height //= 2
+            self.slide_holding = True
+            self.slide_cooldown_timer = self.slide_cooldown
+    
+    def slide_cooldown_update(self):
+        if self.slide_holding:
+            self.slide_holding = False
+            self.height *= 2
+            self.current_animation = 'idle'
+    
+    def use_weapon(self, entities):
+        self.weapon.execute_action(self, entities)
         
-    def input_manager(self, keys):
+    def input_manager(self, keys, entities):
         self.is_moving = False
         self.accel = 0
+        self.mouse_pos = pygame.mouse.get_pos()
+        
         if keys[pygame.K_a]:
             self.accel = -10000
             self.is_moving = True
@@ -468,6 +633,12 @@ class Player:
             self.accel = 10000
             self.is_moving = True
             self.facing = 1
+        
+        if keys[pygame.K_LSHIFT]:
+            if self.grounded and self.slide_cooldown_timer <= 0 and not self.slide_holding:
+                self.sliding()
+        else:
+            self.slide_cooldown_update()
             
         if keys[pygame.K_SPACE]:
             if self.grounded:
@@ -475,7 +646,7 @@ class Player:
             elif not self.jump_key_held:
                 if not self.invincible:
                     self.Forcing()
-            elif self.y_velocity >= -1000 and self.jump_key_held: 
+            elif self.y_velocity >= -1500 and self.jump_key_held: 
                 self.Forcing()
         else:
             self.jump_key_held = False
@@ -527,13 +698,45 @@ class Player:
                     self.x_velocity = 0
                     return True
         
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+        
     def take_damage(self, damage):
+        kb_x = 30
+        kb_y = 30
+
         if not self.invincible:
             self.hp -= damage
             self.invincible = True
             self.invincible_timer = self.invincible_duration
+            self.x += kb_x * self.facing
+            self.y += kb_y * self.facing
     
-    def update(self, delta, platforms, debrises, camera):
+    def update_animation(self, delta):
+        previous_animation = self.current_animation
+
+        if self.slide_holding:
+            self.current_animation = 'sliding'
+        elif self.is_moving:
+            self.current_animation = 'walking'
+        elif self.state == "forcing" or self.state == "falling":
+            self.current_animation = "falling"
+        elif self.state == "jumping":
+            self.current_animation = "jumping"
+        elif self.state == 'grounded':
+            self.current_animation = 'idle'
+        
+        if previous_animation != self.current_animation:
+            self.animation_frame = 0
+            self.animation_timer = 0
+
+        self.animation_timer += delta
+        if self.animation_timer >= self.animation_speed:
+            self.animation_timer = 0
+            frames = self.sprites[self.current_animation]
+            self.animation_frame = (self.animation_frame + 1) % len(frames)
+    
+    def update(self, delta, platforms, debrises, entities, camera):
         screen_y = self.y + camera.camera_y
 
         if not self.invincible:
@@ -544,7 +747,8 @@ class Player:
         keys = pygame.key.get_pressed()
         collision_checking = 8
         collision_checking_term = delta / collision_checking
-        self.input_manager(keys)
+        self.input_manager(keys, entities)
+        self.update_animation(delta)
 
         if not self.grounded:
             self.y_velocity += self.gravity * delta
@@ -559,10 +763,20 @@ class Player:
             self.invincible_timer -= delta
             if self.invincible_timer <= 0:
                 self.invincible = False
-
         
-        self.x_velocity += self.accel * delta
-        self.x_velocity *= 0.9 # 마찰ㄺ
+        self.weapon.update(delta)
+        
+        if self.slide_cooldown_timer > 0 and not self.slide_holding:
+            self.slide_cooldown_timer -= delta
+        
+        if self.slide_holding:
+            self.slide_timer = max(0, self.slide_timer - delta)
+            ratio = max(0, self.slide_timer / self.slide_duration)
+            self.x_velocity = self.sliding_velocity * self.facing * ratio
+        else:
+            self.slide_cooldown_update()
+            self.x_velocity += self.accel * delta
+            self.x_velocity *= 0.9  # 마찰ㄺ
         self.grounded = False
 
         for _ in range(collision_checking): # Protip - 다운웰 느낌나는 서브스텝 알고리즘
@@ -578,15 +792,70 @@ class Player:
     def draw(self, surface, camera):
         screen_y = camera.draw_again(self)
 
-        if self.state == "grounded":
-            current_sprite = self.sprites["idle"][0]
+        if self.current_animation in self.sprites:
+            frames = self.sprites[self.current_animation]
+            if self.animation_frame < len(frames):
+                current_sprite = frames[self.animation_frame]
+                current_sprite = pygame.transform.flip(current_sprite, not self.facing < 0, False)
+            else:
+                current_sprite = frames[0]
         else:
-            current_sprite = self.sprites["falling"][0]
+            current_sprite = self.sprites['idle'][0]
+
+
         
         if self.invincible_timer % 0.2 > 0.1:
             surface.blit(current_sprite, (self.x, screen_y))
+        else:
+            white_sprite = current_sprite.copy()
+            white_sprite.fill(
+                (255, 255, 255, 128), special_flags=pygame.BLEND_RGBA_MULT
+            )
+            surface.blit(white_sprite, (self.x, screen_y))
 
-# 효과들 ( 총알, 파동... )
+# 무기
+
+class Dagger:
+    def __init__(self, cooldown):
+        
+        self.cooldown = cooldown
+        self.cooldown_timer = 0
+        self.damage = 150
+    
+    def update(self, delta):
+        
+        if self.cooldown_timer > 0:
+            self.cooldown_timer -= delta
+
+
+    def execute_action(self, player, entities):
+
+        if self.cooldown_timer > 0:
+            return
+        
+        self.cooldown_timer = self.cooldown
+
+        bullet_x = player.x + player.width // 2
+        bullet_y = player.y + player.height // 2
+
+        mouse_x, mouse_y = player.mouse_pos
+
+        if player.camera:
+            player_screen_y = player.camera.draw_again(bullet_y)
+        else:
+            player_screen_y = bullet_y
+
+        dx = mouse_x - bullet_x
+        dy = mouse_y - player_screen_y
+        angle = math.atan2(dy, dx)
+
+        laser = LaserBeam(bullet_x, bullet_y, angle, self.damage)
+        laser.needs_raycast = True
+        laser.camera = player.camera
+        entities.append(laser)
+        
+
+# 엔티티
 
 class PulseWave:
     def __init__(self, x, y, initial_radius, max_radius, thickness, growth_speed, color, filled=False, effect=None):
@@ -709,6 +978,9 @@ class DoomLaser:
         self.current_frame = 0
         self.animation_speed = 0.1
 
+        self.rect = pygame.Rect(0,0,0,0)
+        self.hit_player = False
+
         sprite_size = (self.default_height, self.current_width)
 
         if DoomLaser.sprite_cash is None:
@@ -728,6 +1000,52 @@ class DoomLaser:
             }
 
         self.sprites = DoomLaser.sprite_cash
+
+    def check_collision(self, player, camera):
+        if self.hit_player or not self.state == 'holding':
+            return None
+
+        player_rect = player.get_rect()
+        player_rect.y = camera.draw_again(player.y)
+
+        laser_len = self.current_width
+        laser_thickness = self.default_height
+        radius = laser_thickness / 2.0
+
+        if radius <= 0:
+            return None
+
+        dir_x = math.cos(self.angle)
+        dir_y = math.sin(self.angle)
+        step = radius * 1.8 
+        if step <= 0:
+            return None
+            
+        num_steps = int(math.ceil(laser_len / step))
+        
+        for i in range(num_steps + 1):
+            # Interpolate along the laser's length
+            interp = (i / num_steps) - 0.5 if num_steps > 0 else 0
+            dist_from_center = interp * laser_len
+
+            # Get world position of the current circle's center
+            circle_x = self.x + dist_from_center * dir_x
+            world_y = self.y + dist_from_center * dir_y
+            screen_y = camera.draw_again(world_y)
+
+            closest_x = max(player_rect.left, min(circle_x, player_rect.right))
+            closest_y = max(player_rect.top, min(screen_y, player_rect.bottom))
+
+            distance_x = circle_x - closest_x
+            distance_y = screen_y - closest_y
+            distance_squared = (distance_x**2) + (distance_y**2)
+
+            if distance_squared < (radius**2):
+                self.hit_player = True
+                player.take_damage(self.effect.get("damage", 1))
+                return self.effect
+
+        return None
 
     def update(self, delta):
         self.stretch_timer += delta
@@ -783,8 +1101,132 @@ class DoomLaser:
         degrees = math.degrees(self.angle)
 
         rotated_sprite = pygame.transform.rotate(scaled_sprite, -degrees)
-        rotated_rect = rotated_sprite.get_rect(center=(self.x, screen_y))
-        surface.blit(rotated_sprite, rotated_rect)
+        self.rect = rotated_sprite.get_rect(center=(self.x, screen_y))
+        surface.blit(rotated_sprite, self.rect)
+
+class LaserBeam:
+    def __init__(self, start_x, start_y, angle, damage, max_length=2000, camera=None):
+        self.start_x = start_x
+        self.start_y = start_y
+        self.damage = damage
+        self.angle = angle
+        self.max_length = max_length
+        self.camera = camera
+
+        self.end_x = start_x + math.cos(angle) * max_length
+        self.end_y = start_y + math.sin(angle) * max_length
+
+        self.hit_x = self.end_x
+        self.hit_y = self.end_y
+        
+        self.lifetime = 0.1
+        self.age = 0
+        self.active = True
+        self.width = 4
+        self.color = WHITE
+
+        self.raycast_done = False
+        self.hit_something = False
+        self.enemy_damaged = False
+
+    def raycast(self, enemies, platforms):
+        if self.raycast_done:
+            return
+
+        closest_distance = self.max_length
+        hit_target = None
+
+        for enemy in enemies:
+            if not enemy.state == 'active':
+                continue
+
+            distance = self.line_rect_intersection(
+                self.start_x, self.start_y, self.end_x, self.end_y, enemy.get_rect()
+            )
+
+            if distance and distance < closest_distance:
+                closest_distance = distance
+                hit_target = enemy
+
+        for platform in platforms:
+            distance = self.line_rect_intersection(
+                self.start_x, self.start_y, self.end_x, self.end_y, platform.get_rect()
+            )
+
+            if distance and distance < closest_distance:
+                closest_distance = distance
+                hit_target = None
+
+        if hit_target and isinstance(hit_target, Enemy) and not self.enemy_damaged:
+            hit_target.take_damage(self.damage)
+            self.enemy_damaged = True
+
+        dir_x = math.cos(self.angle)
+        dir_y = math.sin(self.angle)
+        self.hit_x = self.start_x + dir_x * closest_distance
+        self.hit_y = self.start_y + dir_y * closest_distance
+        self.hit_something = (closest_distance < self.max_length)
+        
+        self.raycast_done = True
+
+    def line_rect_intersection(self, x1, y1, x2, y2, rect):
+        dx = x2 - x1
+        dy = y2 - y1
+        length = math.sqrt(dx**2 + dy**2)
+
+        if length == 0:
+            return None
+
+        dx /= length
+        dy /= length
+
+        steps = int(length)
+        for i in range(steps):
+            check_x = x1 + dx * i
+            check_y = y1 + dy * i
+
+            if rect.collidepoint(check_x, check_y):
+                return i
+
+        return None
+
+    def update(self, delta):
+        self.age += delta
+        if self.age >= self.lifetime:
+            self.active = False
+            self.enemy_damaged = False
+
+    def draw(self, surface, camera):
+        screen_start_y = camera.draw_again(self.start_y)
+        screen_hit_y = camera.draw_again(self.hit_y)
+
+        progress = self.age / self.lifetime
+        alpha = int(255 * (1 - progress))
+
+        temp_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+
+        color_with_alpha = (*self.color[:3], alpha)
+        pygame.draw.line(
+            temp_surface,
+            color_with_alpha,
+            (int(self.start_x), int(screen_start_y)),
+            (int(self.hit_x), int(screen_hit_y)),
+            self.width,
+        )
+
+        surface.blit(temp_surface, (0, 0))
+
+        if self.hit_something and self.age < 0.05:
+            pygame.draw.circle(
+                surface,
+                self.color,
+                (int(self.hit_x), int(screen_hit_y)),
+                int(10 - self.age * 100),
+                3,
+            )
+
+    def get_rect(self):
+        return pygame.Rect(0, 0, 0, 0)
         
 
 
@@ -817,7 +1259,7 @@ class Debris:
             (self.x, screen_y, self.size, self.size)
         )
 
-# 적들
+# 적
 
 class Enemy:
 
@@ -867,10 +1309,12 @@ class Enemy:
         pygame.draw.rect(surface, RED, (self.x, screen_y - 8, hpb_width, hpb_height))
         pygame.draw.rect(surface, GREEN, (self.x, screen_y - 8, hpb_width * hp_ratio, hpb_height))
     
-    def take_damage(self, is_forcing = False):
+    def take_damage(self, damage, is_forcing = False):
         if is_forcing and self.can_death_instantly:
             self.HP = 0
             return True
+
+        self.HP -= damage
         
         if self.HP <= 0:
             self.state = "death_anim_playing"
@@ -889,7 +1333,7 @@ class FireRobot(Enemy):
         self.x_velocity = 600
         self.y_velocity = 600
         self.pulse_timer = 0
-        self.pulse_period = 2.0
+        self.pulse_period = 1.0
         self.pulse_radius = 32.0
         self.max_pulse_radius = 128.0
 
@@ -905,7 +1349,7 @@ class FireRobot(Enemy):
         dist = math.hypot(dx, dy)
         if dist != 0:
             self.x += (dx / dist) * self.x_velocity * delta
-            self.y += (dy / dist) * (self.y_velocity + (camera.scrolling_speed)) * delta
+            self.y += (dy / dist) * (self.y_velocity + (camera.scrolling_speed  * 2)) * delta
 
         self.pulse_timer += delta
         if self.pulse_timer >= self.pulse_period:
@@ -1095,12 +1539,12 @@ class EnemySpawner:
         self.next_enemy_pointer = 0
 
         self.enemy_pattern = [
+            "None",
             "FireRobot",
             "None",
+            "FireRobot",
             "None",
-            "None",
-            "None",
-            "None",
+            "FireRobot",
             "None",
             "RangedRobot",
         ]
@@ -1111,13 +1555,13 @@ class EnemySpawner:
         self.enemy_data = {
             "FireRobot": {
                 "size": (32, 64),
-                "hp": 3,
-                "can_instant_death": True,
+                "hp": 150,
+                "can_instant_death": False,
                 "spawn_type": "air"
             },
             "RangedRobot": {
                 "size": (64, 64),
-                "hp": 2,
+                "hp": 400,
                 "can_instant_death": True,
                 "spawn_type": "platform"
             }
@@ -1129,38 +1573,45 @@ class EnemySpawner:
 
         for _ in range(3):
             self.generate('default', None)
-        
-    def rotation(self):
-        pattern_len = len(self.enemy_pattern)
-        self.next_enemy = self.enemy_pattern[self.next_enemy_pointer % pattern_len]
-        self.next_enemy_pointer += 1
+    
+    def change_pattern(self, pattern_list):
+        new_pattern = []
+
+        for name in pattern_list:
+            new_pattern.append(name)
+
+        self.enemy_pattern = new_pattern
+        self.next_enemy_pointer = 0
+
     
     def generate(self, flag, platforms):
         self.last_y += random.randint(self.min_gap_y, self.max_gap_y)
 
-        self.rotation()
-        if self.next_enemy == "None":
+        pattern_len = len(self.enemy_pattern)
+        enemy_type_to_spawn = self.enemy_pattern[self.next_enemy_pointer % pattern_len]
+        self.next_enemy_pointer += 1
+
+        if enemy_type_to_spawn == "None":
             return
 
-        enemy_data = self.enemy_data[self.next_enemy]
-
+        enemy_data = self.enemy_data[enemy_type_to_spawn]
         size = enemy_data['size']
         hp = enemy_data['hp']
         instant_deathable = enemy_data['can_instant_death']
         spawn_type = enemy_data['spawn_type']
 
+        enemy = None 
+
         if spawn_type == 'air':
             x = random.randint(100, SCREEN_WIDTH)
             y = self.last_y
-
-            if self.next_enemy == 'FireRobot':
+            if enemy_type_to_spawn == 'FireRobot':
                 enemy = FireRobot(hp, size, instant_deathable, x, y)
-
-            self.enemies.append(enemy)
+        
         elif spawn_type == 'platform':
             if platforms is None or len(platforms) == 0:
                 return
-            
+
             platform = max(platforms, key=lambda p: p.y)
             platform_x = platform.x
             platform_y = platform.y
@@ -1175,31 +1626,26 @@ class EnemySpawner:
             enemy_height = size[1]
             y = platform_y - enemy_height
 
-            enemy = None
-            if self.next_enemy == 'RangedRobot' and self.ranged_robot_unlocked:
-                ranged_count = 0
-                for e in self.enemies:
-                    if isinstance(e, RangedRobot):
-                        ranged_count += 1
-                if ranged_count >= 2:
-                    return
-                enemy = RangedRobot(hp, size, instant_deathable, x, y)
-            
-            if enemy is not None:
-                self.enemies.append(enemy)
+            if enemy_type_to_spawn == 'RangedRobot' and self.ranged_robot_unlocked:
+                ranged_count = sum(1 for e in self.enemies if isinstance(e, RangedRobot))
+                if ranged_count < 2:
+                    enemy = RangedRobot(hp, size, instant_deathable, x, y)
+        
+        if enemy is not None:
+            self.enemies.append(enemy)
 
 
 
         
     def update(self, camera, flag, platforms):
-        if flag == 'ranged_robot_appear' and not self.ranged_robot_unlocked:
+        if flag == 'Now Lasers will appear.' and not self.ranged_robot_unlocked:
             self.ranged_robot_unlocked = True
 
         for i in range(len(self.enemies) - 1, -1, -1):
             enemy = self.enemies[i]
             screen_y = enemy.y + camera.camera_y
 
-            if screen_y < -2000:
+            if screen_y < -200 or screen_y > 2000:
                 self.enemies.pop(i)
                 continue
             
@@ -1209,29 +1655,28 @@ class EnemySpawner:
         
         if len(self.enemies) == 0:
             self.last_y = abs(camera.camera_y) + SCREEN_HEIGHT
+        
+        max_enemies_on_screen = 8
+        if len(self.enemies) < max_enemies_on_screen:
             self.generate(flag, platforms)
-        else:
-            last_screen_y = self.enemies[-1].y + camera.camera_y
-            if last_screen_y < SCREEN_HEIGHT + 500:
-                self.generate(flag, platforms)
     
     def draw(self, camera, surface):
         for enemy in self.enemies:
             enemy.draw(surface, camera)
 
-# 플랫폼들
+# 플랫폼
 
 class PlatformGen:
     def __init__(self):
         self.platforms = []
         self.last_y = 400
-        self.platforms_pattern = ["Normal", "Normal", "Breakable", "Normal", "Breakable"]
+        self.platforms_pattern = ["Normal", "Normal", "Breakable", "Breakable", "Breakable"]
         self.pointer = 0
         self.NextPlatform = None
         self.min_gap_y = 70
-        self.max_gap_y = 170
+        self.max_gap_y = 250
         self.min_width = 100
-        self.max_width = 500
+        self.max_width = 400
         self.fixed_height = 32
 
         self.where_width = 0
@@ -1241,6 +1686,15 @@ class PlatformGen:
     def rotation(self):
         self.NextPlatform = self.platforms_pattern[self.pointer % 5]
         self.pointer += 1
+    
+    def change_pattern(self, pattern_list):
+        new_pattern = []
+
+        for name in pattern_list:
+            new_pattern.append(name)
+
+        self.platforms_pattern = new_pattern
+        self.pointer = 0
 
     def generate(self):
         self.last_y += random.randint(self.min_gap_y, self.max_gap_y)
@@ -1345,8 +1799,8 @@ class BreakablePlatform(PlatformBase):
     def is_broken(self):
         return self.broken
 
-# 인게임 클래스        
-
+    
+# 게임
 class Game:
     def __init__(self):
         self.clock = pygame.time.Clock()
@@ -1373,16 +1827,24 @@ class Game:
         player_x = SCREEN_WIDTH // 2
         player_y = SCREEN_HEIGHT // 2
         self.player = Player(player_x, player_y)
+        self.player.camera = self.camera
 
         self.enemy_spawner = EnemySpawner()
+        self.current_attacks = []
         self.current_pulses = []
         self.current_lasers = []
         self.debrises = []
 
         self.depth_checker = DepthChecker()
-        self.current_event = 'default'
+        self.current_event = 'Normal'
         self.weapon_select_flag = False
         self.speed_upable = False
+
+        self.max_combo = 0
+        self.current_combo = 0
+
+        with open('CutsceneData/depth_list.json', 'r') as f:
+            self.depth_list = json.load(f)
     
     def draw(self, delta):
         self.game_surface.fill(WHITE)
@@ -1392,6 +1854,8 @@ class Game:
         if self.screen_blink.active:
             self.screen_blink.update(delta)
             self.screen_blink.draw(self.game_surface)
+        
+        self.depth_checker.draw_alert(self.game_surface)
 
 
     
@@ -1399,12 +1863,23 @@ class Game:
         delta = clock.tick(FPS) / 900
         self.world_timer += delta
 
-        self.current_event, self.weapon_select_flag = self.depth_checker.update(self.camera.camera_y)
+        self.current_event, self.weapon_select_flag, pattern_change = self.depth_checker.update(delta, self.camera.camera_y)
 
-        if self.current_event == 'speed_up' and not self.speed_upable:
+        if pattern_change:
+            if pattern_change.get("enemy_pattern") is not None:
+                self.enemy_spawner.change_pattern(pattern_change.get("enemy_pattern"))
+            if pattern_change.get("platform_pattern") is not None:
+                self.PlatformGenerator.change_pattern(pattern_change.get("platform_pattern"))
+
+
+        if self.current_event == 'Speeding Up.' and not self.speed_upable:
             self.speed_upable = True
             self.camera.scrolling_speed += 50
-        elif not self.current_event == 'speed_up':
+        elif self.current_event == "Speeding Down." and not self.speed_upable:
+            self.speed_upable = True
+            self.enemy_spawner.enemy_pattern = ["FireRobot", "RangedRobot", "FireRobot", "RangedRobot", "FireRobot", "RangedRobot", "FireRobot", "RangedRobot"]
+            self.camera.scrolling_speed -= 50
+        elif not self.current_event == "Speeding Up." and not self.current_event == "Speeding Down.":
             self.speed_upable = False
 
         if self.world_timer < 10:
@@ -1416,9 +1891,17 @@ class Game:
             self.blink_timer = 0
             self.screen_blink.reset()
         
-        self.player.update(delta, self.PlatformGenerator.platforms, self.debrises, self.camera)
+        self.player.update(delta, self.PlatformGenerator.platforms, self.debrises, self.current_attacks, self.camera)
         self.camera.camera_chase(delta, self.player)
         self.enemy_spawner.update(self.camera, self.current_event, self.PlatformGenerator.platforms)
+
+        for attacks in self.current_attacks[:]:
+            if isinstance(attacks, LaserBeam):
+                attacks.update(delta)
+                if not attacks.active:
+                    self.current_attacks.remove(attacks)
+                    continue
+                attacks.raycast(self.enemy_spawner.enemies, self.PlatformGenerator.platforms)
 
         for enemy in self.enemy_spawner.enemies:
             if isinstance(enemy, FireRobot):
@@ -1427,6 +1910,12 @@ class Game:
                 enemy.update(delta, self.player, self.PlatformGenerator.platforms, self.camera, self.current_lasers)
             else:
                 enemy.update(delta, self.player)
+            
+            if self.player.get_rect().colliderect(enemy.get_rect()):
+                if self.player.state == 'forcing' and enemy.can_death_instantly:
+                    enemy.take_damage(1, is_forcing=True)
+                else:
+                    self.player.take_damage(1)
         
         for i in range(len(self.current_pulses) - 1, -1, -1):
             self.current_pulses[i].update(delta)
@@ -1437,7 +1926,7 @@ class Game:
                 if "knockback" in effect:
                     kb_x, kb_y = effect['knockback']
                     self.player.x_velocity += kb_x
-                    self.player.y_velocity = kb_y
+                    self.player.y_velocity += kb_y
                 
             if not self.current_pulses[i].active:
                 self.current_pulses.pop(i)
@@ -1445,6 +1934,13 @@ class Game:
         for i in range(len(self.current_lasers) - 1, -1, -1):
             laser = self.current_lasers[i]
             laser.update(delta)
+
+            effect = laser.check_collision(self.player, self.camera)
+            if effect:
+                if "knockback" in effect:
+                    kb_x, kb_y = effect['knockback']
+                    self.player.x_velocity += kb_x
+                    self.player.y_velocity += kb_y
 
             if laser.state == 'finished' or laser.stretch_timer > laser.disappearing_duration:
                 self.current_lasers.pop(i)
@@ -1466,14 +1962,19 @@ class Game:
             laser.draw(self.game_surface, self.camera)
         self.enemy_spawner.draw(self.camera, self.game_surface)
         self.player.draw(self.game_surface, self.camera)
+        for attacks in self.current_attacks:
+            if isinstance(attacks, LaserBeam):
+                attacks.draw(self.game_surface, self.camera)
         for debris in self.debrises:
             debris.update(delta)
             debris.draw(self.game_surface, self.camera)
         self.debrises = [d for d in self.debrises if d.lifetime > 0]
+        if not game_over:
+            draw_health_hud(self.game_surface, self.player, abs(self.camera.camera_y) / 10000)
         screen.blit(self.game_surface, (0, 0))
 
-# 보조 클래스
 
+# 보조 클래스
 class UIManager:
     def __init__(self, duration):
         self.duration = duration
@@ -1624,30 +2125,90 @@ class DepthChecker:
         self.depth = 0
         self.event_interval = 5000
         self.events = [
-            'default',
-            'speed_up',
-            'ranged_robot_appear',
-            'speed_up',
-            'speed_up',
-            '23M-RFT70_Aura',
-            '23M-RFT70_appear',
-            'speed_up',
-            'howling_event',
-            'speed_up',
-            'Dr.R_appear',
+            "Normal",
+            "Speeding Up.",
+            "Now Lasers will appear.",
+            "Speeding Up.",
+            "Normal",
+            "Normal",
+            "Speeding Down.",
+            "23M-RFT70 will appear.",
+            "Normal",
+            "23M-RFT70 Appeared.",
+            "Speeding Up.",
+            "The Howling appeared.",
+            "Speeding Up.",
+            "Dr.R appeared.",
         ]
-    
-    def update(self, camera_y):
+
+        self.alert_text = pygame.font.Font(None, 72)
+        self.alert_text_duration = 3.0
+        self.alert_text_timer = 0
+
+        self.previous_event_index = 0
+        self.current_alert_text = ''
+        self.show_alert = False
+
+        with open('CutsceneData/depth_list.json', 'r') as f:
+            self.depth_list = json.load(f)
+        self.depth_list = sorted([(int(k), v) for k, v in self.depth_list.items()], key=lambda x: x[0])
+        self.pattern_index = -1
+
+    def update(self, delta, camera_y):
         self.depth = abs(camera_y)
 
         index = int(self.depth // self.event_interval)
         if index >= len(self.events):
             index = len(self.events) - 1
         
-        return (self.events[index], True)
+        current_event = self.events[index]
+
+        if not index == self.previous_event_index:
+            self.current_alert_text = current_event
+            self.show_alert = True
+            self.alert_text_timer = self.alert_text_duration
+            self.previous_event_index = index
+        
+        if self.alert_text_timer > 0:
+            self.alert_text_timer -= delta
+            if self.alert_text_timer <= 0:
+                self.show_alert = False
+
+        pattern_change = None
+        
+        next_idx = self.pattern_index + 1
+        if next_idx < len(self.depth_list):
+            next_check_depth, next_data = self.depth_list[next_idx]
+            if self.depth >= next_check_depth:
+                self.pattern_index = next_idx
+                pattern_change = {
+                    "enemy_pattern": next_data.get("enemy_pattern"),
+                    "platform_pattern": next_data.get("platform_pattern")
+                }
+        
+        
+
+        return (self.events[index], True, pattern_change)
+
+    def draw_alert(self, screen):
+        if not self.show_alert:
+            return
+        
+        alpha = int(255 * self.alert_text_timer / self.alert_text_duration)
+        alpha = max(0, min(255, alpha))
+
+        if self.current_alert_text == 'Normal':
+            self.current_alert_text = str(
+                format(self.depth / 10000, ".1f") + " KM reached."
+            )
+        
+        text = self.alert_text.render(self.current_alert_text, True, WHITE)
+
+        text.set_alpha(alpha)
+        text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT * 0.85))
+        screen.blit(text, text_rect)
 
 
-# 인게임
 
 with open("CutsceneData/cutscene_data.json", encoding='utf-8') as f:
     cutscene_data = json.load(f)
@@ -1657,6 +2218,8 @@ cutscene_data = {int(k): v for k, v in cutscene_data.items()}
 LogoMaker = LogoShow()
 Starter = StartMenu()
 Ingame = Game()
+game_over_screen = GameOverScreen()
+
 current_state = GameState.LOGO
 screen_fader = None
 
@@ -1670,6 +2233,7 @@ def play_cutscene(scenenumber):
         raise ValueError
 
 current_cutscene = None
+game_over = False
 camera = Camera((SCREEN_WIDTH, SCREEN_HEIGHT))
 
 while not current_state == GameState.EXIT:
@@ -1678,7 +2242,17 @@ while not current_state == GameState.EXIT:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             current_state = GameState.EXIT
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1 and current_state == GameState.PLAYING and not game_over:
+                Ingame.player.use_weapon(Ingame.current_attacks)
+                
         if event.type == pygame.KEYDOWN:
+            if game_over:
+                if event.key == pygame.K_r:
+                    game_over = False
+                    Ingame = Game()
+                    game_over_screen = GameOverScreen()
+                    current_state = GameState.PLAYING
             if event.key == pygame.K_SPACE:
                 if isinstance(current_state, tuple) and current_state[0] == 'cutscene':
                     if current_cutscene:
@@ -1759,10 +2333,21 @@ while not current_state == GameState.EXIT:
             current_state = GameState.EXIT
     
     if current_state == GameState.PLAYING:
-        Ingame.run()
-    
+        max_location = abs(Ingame.camera.camera_y) / 10000
+        if not game_over:
+            Ingame.run()
+        else:
+            game_over_screen.update(delta, Ingame.max_combo, max_location)
+            game_over_screen.draw(screen)
+            
 
-
+    if Ingame and Ingame.player.hp <= 0:
+        if not game_over:
+            game_over = True
+        
+        if game_over:
+            game_over_screen.update(delta, Ingame.max_combo, max_location)
+            game_over_screen.draw(screen)
 
     
     pygame.display.flip()

@@ -929,23 +929,20 @@ class Rifle(Weapon):
         bullet_x = player.x + player.width // 2
         bullet_y = player.y + player.height // 2
 
-        # 마우스 위치로 각도 계산
         mouse_x, mouse_y = player.mouse_pos
 
-        # 플레이어의 화면 좌표 계산
         if player.camera:
             player_screen_y = player.camera.DrawAgain(bullet_y)
         else:
             player_screen_y = bullet_y
 
-        # 화면 좌표 기준으로 각도 계산
         dx = mouse_x - bullet_x
         dy = mouse_y - player_screen_y
         angle = math.atan2(dy, dx)
 
         bullet = LaserBeam(bullet_x, bullet_y, angle)
         bullet.needs_raycast = True
-        bullet.camera = player.camera  # 카메라 참조 전달
+        bullet.camera = player.camera
         entities.append(bullet)
 
 class BoostBoots(Weapon):
@@ -1634,26 +1631,25 @@ class Player:
 # ═══════════════════════════════════════════════════
 
 def draw_health_hud(surface, player):
-    """플레이어 체력 HUD 그리기 (오른쪽 상단, 6칸 시스템)"""
-    # HUD 위치 (화면 오른쪽 상단)
+    
     base_x = SCREEN_WIDTH - 20
     base_y = 30
 
-    # 각 칸의 크기
+    
     cell_width = 40
     cell_height = 25
     cell_gap = 4
 
-    # 전체 너비 계산 (6칸 + 5개의 간격)
+    
     total_width = cell_width * 6 + cell_gap * 5
 
-    # 시작 위치 (오른쪽 정렬)
+    
     start_x = base_x - total_width
 
-    # 배경 박스
+    
     bg_rect = pygame.Rect(start_x - 5, base_y - 5, total_width + 10, cell_height + 10)
 
-    # 무적 시간일 때 배경색 변경
+    
     if player.damage_cooldown > 0:
         bg_color = (100, 100, 0)  # 노란빛 배경
         border_color = YELLOW
@@ -1664,12 +1660,12 @@ def draw_health_hud(surface, player):
     pygame.draw.rect(surface, bg_color, bg_rect)
     pygame.draw.rect(surface, border_color, bg_rect, 3)
 
-    # 각 칸 그리기
+    
     for i in range(6):
         cell_x = start_x + i * (cell_width + cell_gap)
         cell_rect = pygame.Rect(cell_x, base_y, cell_width, cell_height)
 
-        # 체력이 남아있는 칸은 빨간색, 없는 칸은 어두운 회색
+    
         if i < player.hp:
             color = RED
         else:
@@ -1678,18 +1674,17 @@ def draw_health_hud(surface, player):
         pygame.draw.rect(surface, color, cell_rect)
         pygame.draw.rect(surface, border_color, cell_rect, 2)
 
-    # 체력 텍스트 (중앙에 표시)
+    
     font = pygame.font.Font(None, 32)
     hp_text = font.render(f"{player.hp}/{player.max_hp}", True, WHITE)
     text_rect = hp_text.get_rect(center=(start_x + total_width // 2, base_y + cell_height // 2))
 
-    # 텍스트 배경 (가독성)
+    
     text_bg = pygame.Rect(text_rect.x - 3, text_rect.y - 1, text_rect.width + 6, text_rect.height + 2)
     pygame.draw.rect(surface, BLACK, text_bg)
 
     surface.blit(hp_text, text_rect)
 
-    # 무적 시간 표시 (박스 아래)
     if player.damage_cooldown > 0:
         invincible_font = pygame.font.Font(None, 24)
         invincible_text = invincible_font.render(f"무적: {player.damage_cooldown:.1f}s", True, YELLOW)

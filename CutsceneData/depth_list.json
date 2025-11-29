@@ -1,0 +1,35 @@
+{
+    "0": {
+        "enemy_pattern": [
+            "FireRobot",
+            "FireRobot",
+            "None"
+        ],
+        "platform_pattern": ["Normal", "Normal", "Breakable", "Breakable", "Breakable"]
+    },
+    "10000": {
+        "enemy_pattern": [
+            "FireRobot",
+            "FireRobot",
+            "None",
+            "RangedRobot",
+            "None",
+            "FireRobot",
+            "FireRobot",
+            "RangedRobot"
+        ],
+        "platform_pattern": ["Breakable", "Normal", "Breakable", "Breakable", "Breakable", "Normal", "Breakable", "Breakable"]
+    },
+    "15000": {
+        "enemy_pattern": [
+            "FireRobot",
+            "FireRobot",
+            "FireRobot",
+            "None",
+            "FireRobot",
+            "FireRobot",
+            "RangedRobot"
+        ],
+        "platform_pattern": ["Normal", "Normal", "Breakable", "Breakable", "Normal", "Normal", "Breakable", "Normal"]
+    }
+}
