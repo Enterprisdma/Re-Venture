@@ -1,17 +1,3 @@
-'''
-뭐가 AI고 뭐가 사람인지 확실히 봐라
-AI
-- 성수위한패키지다운로드 - 무슨 메소드 써야 하는지 AI가 알려줌
-- 기본적 틀 ( 그리기는 draw 함수로 이름 정해야 일관성 있고 이뻐진다, 게임 루프에서 실시간 반복은 update로 정해야 이뻐진다...)
-- 서브스텝 알고리즘 ( 나눠서 충돌 검사하는거 )
-- UIManager ( 어캐만드냐 )
-
-인간
-- 상태 머신 ( 클래스로 묶어서 관리함 ㅅㄱ -> 게임 루프마다 바꾸면서 상태 변했는지 체크 )
-- json으로 컷씬 관리하기 ( 아이디어 낸 자한테 박수111111 )
-- 플레이어 이동, 플랫폼 생성, 카메라 ( AI가 만든 줄 알었지? - 월드 좌표 / 화면 좌표 개념과 공식은 AI가 알려줌 )
-'''
-
 # 다음 작업 - 플레이어 업그레이드 UI 만들기
 
 import subprocess
@@ -75,11 +61,11 @@ def sungsoo_wihan_package_downloader(package):
 
 sungsoo_wihan_package_downloader("pygame")
 
-import pygame  # noqa: E402
-import pygame.gfxdraw # noqa: E402
-import math  # noqa: E402
-import json  # noqa: E402
-import random  # noqa: E402
+import pygame
+import pygame.gfxdraw
+import math
+import json
+import random
 
 pygame.init()
 
@@ -88,7 +74,7 @@ SCREEN_HEIGHT = 852
 FPS = 60
 icon = pygame.image.load("Sprites/Object/CompanyLogo.png")
 
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
 pygame.display.set_caption("RE:Venture")
 clock = pygame.time.Clock()
 pygame.display.set_icon(icon)
@@ -103,8 +89,6 @@ YELLOW = (255, 255, 0)
 ORANGE = (255, 165, 0)
 PURPLE = (150, 0, 200)
 CYAN = (0, 255, 255)
-
-# UI
 
 class LogoShow:
     def __init__(self):
@@ -392,7 +376,7 @@ def draw_health_hud(surface, player, km):
     bg_rect = pygame.Rect(start_x - 5, base_y - 5, total_width + 10, cell_height + 10)
 
     if player.invincible_timer > 0:
-        bg_color = (100, 100, 0)  # 노란빛 배경
+        bg_color = (100, 100, 0)
         border_color = YELLOW
     else:
         bg_color = (40, 40, 40)
@@ -430,6 +414,54 @@ def draw_health_hud(surface, player, km):
     km_text = km_font.render(f"KM: {km:.1f}s", True, YELLOW)
     km_rect = km_text.get_rect(topleft=(base_x, base_y + cell_height + 15))
     surface.blit(km_text, km_rect)
+
+def draw_boss_health_bar(surface, boss):
+    if boss is None or boss.state == "dead":
+        return
+
+    bar_width = 800
+    bar_height = 30
+    bar_x = (SCREEN_WIDTH - bar_width) // 2
+    bar_y = 50
+
+    bg_rect = pygame.Rect(bar_x - 5, bar_y -5, bar_width + 10, bar_height + 10)
+    pygame.draw.rect(surface, (40, 40, 40), bg_rect)
+    pygame.draw.rect(surface, WHITE, bg_rect, 3)
+
+    hp_ratio = max(0, boss.HP / boss.max_HP)
+    current_bar_width = int(bar_width * hp_ratio)
+
+    if hp_ratio > 0.6:
+        bar_color = (255, 0, 0)
+    elif hp_ratio > 0.3:
+        bar_color = (255, 165, 0)
+    else:
+        bar_color = (255, 255, 0)
+
+    if current_bar_width > 0:
+        hp_rect = pygame.Rect(bar_x, bar_y, current_bar_width, bar_height)
+        pygame.draw.rect(surface, bar_color, hp_rect)
+
+    border_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height)
+    pygame.draw.rect(surface, WHITE, border_rect, 2)
+
+    font = pygame.font.Font(None, 28)
+    name_text = font.render("Boss: 23M-RFT70", True, WHITE)
+    name_rect = name_text.get_rect(center=(SCREEN_WIDTH // 2, bar_y - 20))
+    surface.blit(name_text, name_rect)
+
+    hp_font = pygame.font.Font(None, 24)
+    hp_text = hp_font.render(f"{int(boss.HP)} / {int(boss.max_HP)}", True, WHITE)
+    hp_text_rect = hp_text.get_rect(center=(SCREEN_WIDTH // 2, bar_y + bar_height // 2))
+
+    text_bg = pygame.Rect(
+        hp_text_rect.x - 3,
+        hp_text_rect.y - 1,
+        hp_text_rect.width + 6,
+        hp_text_rect.height + 2,
+    )
+    pygame.draw.rect(surface, BLACK, text_bg)
+    surface.blit(hp_text, hp_text_rect)
 
 class UpgradeUI:
     def __init__(self):
@@ -504,7 +536,7 @@ class UpgradeUI:
                 self.choice_pointer = len(self.choices) - 1
             self.input_timer = self.input_cooldown
         
-        if keys[pygame.K_RETURN] or keys[pygame.K_SPACE]:
+        if keys[pygame.K_RETURN]:
             if 0 <= self.choice_pointer < len(self.choices):
                 self.selected = self.choices[self.choice_pointer]
                 self.active = False
@@ -689,8 +721,6 @@ class GameOverScreen:
         self.blink_timer = 0
         self.show_text = True
 
-# 플레이어
-
 def load_sprites(path, size, flip=False):
     img = pygame.image.load(path)
     img = pygame.transform.scale(img, size)
@@ -712,7 +742,7 @@ class Player:
         self.width = 64
         self.height = 64
         self.grounded = False
-        self.state = "grounded" # "Forcing", "stunned", "sliding", "falling", 'walking'
+        self.state = "grounded"
         self.diving = False
         self.bouncing = False
         self.can_dive = True
@@ -736,6 +766,15 @@ class Player:
 
         self.hitstop_timer = 0
         self.hitstop_duration = 0.5
+
+        self.stun_timer = 0.0
+        self.stun_duration = 1.0
+        self.slow_timer = 0.0
+        self.slow_duration = 2.0
+
+        self.coord_debuff_active = False
+        self.coord_debuff_timer = 0.0
+        self.coord_debuff_duration = 1.5
 
         self.current_animation = 'idle'
         self.animation_frame = 0
@@ -764,6 +803,12 @@ class Player:
             "walking":[load_sprites(f"Sprites/Player/LEEJAMMIN{i}.png", size) for i in range(9, 16)],
             "sliding":[load_sprites("Sprites/Player/LEEJAMMIN16.png", size)]
         }
+
+    def apply_stun(self):
+        self.stun_timer = self.stun_duration
+
+    def apply_slow(self):
+        self.slow_timer = self.slow_duration
 
     def jump(self):
         if self.grounded:
@@ -807,7 +852,7 @@ class Player:
         
     def input_manager(self, keys, entities, delta):
 
-        if self.hitstop_timer > 0:
+        if self.hitstop_timer > 0 or self.stun_timer > 0:
             return
         
         if self.input_blocked:
@@ -817,12 +862,16 @@ class Player:
         self.accel = 0
         self.mouse_pos = pygame.mouse.get_pos()
         
+        move_speed = 10000
+        if self.slow_timer > 0:
+            move_speed *= 0.5
+
         if keys[pygame.K_a]:
-            self.accel = -10000
+            self.accel = -move_speed
             self.is_moving = True
             self.facing = -1
         elif keys[pygame.K_d]:
-            self.accel = 10000
+            self.accel = move_speed
             self.is_moving = True
             self.facing = 1
         
@@ -897,7 +946,7 @@ class Player:
         kb_y = -1500
         
         if self.invincible:
-            return
+            return False
 
         self.hp -= damage
         if self.hp < 0:
@@ -910,6 +959,11 @@ class Player:
         self.y_velocity = kb_y
 
         self.hitstop_timer = self.hitstop_duration
+        return True
+
+    def apply_coord_debuff(self):
+        self.coord_debuff_active = True
+        self.coord_debuff_timer = self.coord_debuff_duration
     
     def update_animation(self, delta):
         previous_animation = self.current_animation
@@ -937,6 +991,16 @@ class Player:
     
     def update(self, delta, platforms, debrises, entities, camera):
         screen_y = self.y + camera.camera_y
+
+        if self.stun_timer > 0:
+            self.stun_timer -= delta
+        if self.slow_timer > 0:
+            self.slow_timer -= delta
+
+        if self.coord_debuff_timer > 0:
+            self.coord_debuff_timer -= delta
+            if self.coord_debuff_timer <= 0:
+                self.coord_debuff_active = False
 
         if self.hitstop_timer > 0:
             self.hitstop_timer -= delta
@@ -980,10 +1044,10 @@ class Player:
         else:
             self.slide_cooldown_update()
             self.x_velocity += self.accel * delta
-            self.x_velocity *= 0.9  # 마찰ㄺ
+            self.x_velocity *= 0.9
         self.grounded = False
 
-        for _ in range(collision_checking): # Protip - 다운웰 느낌나는 서브스텝 알고리즘
+        for _ in range(collision_checking):
             self.x += self.x_velocity * collision_checking_term
             self.y += self.y_velocity * collision_checking_term
 
@@ -1006,16 +1070,15 @@ class Player:
         else:
             current_sprite = self.sprites['idle'][0]
 
-
         
-        if self.invincible_timer % 0.2 > 0.1:
+        if self.invincible_timer > 0 and self.invincible_timer % 0.2 > 0.1:
             surface.blit(current_sprite, (self.x, screen_y))
+        elif self.coord_debuff_active and self.coord_debuff_timer % 0.2 > 0.1:
+            blue_sprite = current_sprite.copy()
+            blue_sprite.fill(BLUE, special_flags=pygame.BLEND_RGB_ADD)
+            surface.blit(blue_sprite, (self.x, screen_y))
         else:
-            white_sprite = current_sprite.copy()
-            white_sprite.fill(WHITE, special_flags=pygame.BLEND_RGB_ADD)
-            surface.blit(white_sprite, (self.x, screen_y))
-
-# 무기
+            surface.blit(current_sprite, (self.x, screen_y))
 
 class Dagger:
     def __init__(self, cooldown):
@@ -1075,9 +1138,6 @@ class Dagger:
             laser.needs_raycast = True
             laser.camera = player.camera
         
-
-# 엔티티
-
 class PulseWave:
     def __init__(self, x, y, initial_radius, max_radius, thickness, growth_speed, color, filled=False, effect=None, owner=None):
         
@@ -1096,6 +1156,7 @@ class PulseWave:
         self.hit_player = False
         self.hit_enemies = set()
         self.owner = owner
+        self.is_player_owned = False
         self.effect = effect if effect else {}
 
         self.fadeout_manager = UIManager(duration=1)
@@ -1117,28 +1178,29 @@ class PulseWave:
 
         screen_y = self.y + camera.camera_y
         
-        if screen_y < -200 or screen_y > SCREEN_HEIGHT + 200:
+        if screen_y < -400 or screen_y > SCREEN_HEIGHT + 400:
             return
 
-        color = (*self.color, self.alpha)
+        temp_surface = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+        color = (*self.color, int(self.alpha))
         
         if self.filled:
-            pygame.gfxdraw.filled_circle(
-                surface,
-                int(self.x),
-                int(screen_y),
-                int(self.radius),
-                color
+            pygame.draw.circle(
+                temp_surface,
+                color,
+                (int(self.x), int(screen_y)),
+                int(self.radius)
             )
         else:
             for i in range(self.thickness):
-                pygame.gfxdraw.circle(
-                    surface,
-                    int(self.x),
-                    int(screen_y),
-                    int(self.radius) - i,
-                    color
+                pygame.draw.circle(
+                    temp_surface,
+                    color,
+                    (int(self.x), int(screen_y)),
+                    int(self.radius) - i
                 )
+        
+        surface.blit(temp_surface, (0, 0))
     
     def check_collision_enemy(self, enemy):
         if not self.active:
@@ -1337,7 +1399,7 @@ class DoomLaser:
         surface.blit(rotated_sprite, self.rect)
 
 class LaserBeam:
-    def __init__(self, start_x, start_y, angle, damage, max_length=2000, camera=None, dagger=None):
+    def __init__(self, start_x, start_y, angle, damage, max_length=2000, camera=None, dagger=None, owner_pattern=None):
         self.start_x = start_x
         self.start_y = start_y
         self.damage = damage
@@ -1369,6 +1431,8 @@ class LaserBeam:
         self.hit_something = False
         self.enemy_damaged = False
 
+        self.owner_pattern = owner_pattern
+
     def raycast(self, enemies, platforms, pulses=None):
         if self.raycast_done:
             return
@@ -1377,8 +1441,11 @@ class LaserBeam:
         hit_target = None
 
         for enemy in enemies:
-            if not enemy.state == 'active':
-                continue
+            if isinstance(enemy, Boss23M):
+                if enemy.state == "dead":
+                    continue
+                elif enemy.state == 'spawning':
+                    continue
 
             distance = self.line_rect_intersection(
                 self.start_x, self.start_y, self.end_x, self.end_y, enemy.get_rect()
@@ -1425,6 +1492,7 @@ class LaserBeam:
                 effect=effect,
                 owner=self
             )
+            pulse.is_player_owned = True
             pulses.append(pulse)
 
     def line_rect_intersection(self, x1, y1, x2, y2, rect):
@@ -1511,13 +1579,34 @@ class Debris:
     
     def draw(self, surface, camera):
         screen_y = self.y + camera.camera_y
-        pygame.draw.rect(
-            surface,
-            self.color,
-            (self.x, screen_y, self.size, self.size)
-        )
+        temp_surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        temp_surf.fill((*self.color, self.alpha))
+        surface.blit(temp_surf, (self.x, screen_y))
 
-# 적
+class AfterImage:
+    def __init__(self, x, y, sprite, duration, facing):
+        self.x = x
+        self.y = y
+        self.sprite = pygame.transform.flip(sprite, not facing < 0, False)
+        self.duration = duration
+        self.lifetime = duration
+        self.initial_alpha = 150
+
+    def update(self, delta):
+        self.lifetime -= delta
+        if self.lifetime < 0:
+            self.lifetime = 0
+    
+    def get_rect(self):
+        return self.sprite.get_rect(topleft=(self.x, self.y))
+
+    def draw(self, surface, camera):
+        if self.lifetime > 0:
+            alpha = (self.lifetime / self.duration) * self.initial_alpha
+            temp_sprite = self.sprite.copy()
+            temp_sprite.set_alpha(alpha)
+            screen_y = camera.draw_again(self)
+            surface.blit(temp_sprite, (self.x, screen_y))
 
 class Enemy:
 
@@ -1530,6 +1619,7 @@ class Enemy:
         self.y = y
         self.width, self.height = sprite_size
         self.state = "active"
+        self.active = True
 
         self.sprites = {}
         self.current_animation = "default"
@@ -1795,68 +1885,149 @@ class Boss23M(Enemy):
     sprite_cash = None
 
     def __init__(self, x, y):
-        boss_hp = 10000
+        boss_hp = 15000     
         sprite_size = (128, 128)
         super().__init__(boss_hp, sprite_size, False, x, y)
 
         if Boss23M.sprite_cash is None:
             Boss23M.sprite_cash = {
-                "appear":       [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(1, 16)],
-                "idle":         [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(16, 26)],
-                "shootready":   [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(26, 31)],
-                "shoot":        [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(31, 43)],
-                "strikeready":  [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(43, 46)],
-                "falling":      [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(46, 48)],
-                "defenseready": [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(48, 51)],
-                "defense":      [load_sprites("Sprites/Boss/23M-RFT70/23M_51.png", sprite_size)],
-                "attackready":  [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(52, 54)],
-                "attack":       [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(54, 57)],
-                "counter":      [load_sprites("Sprites/Boss/23M-RFT70/23M_57.png", sprite_size)],
-                "stunned":      [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(58, 61)],
+                "appear": [
+                    load_sprites(f"Sprites/Boss/23M-RFT70/23M-{i}.png", sprite_size)
+                    for i in range(1, 16)
+                ],
+                "idle": [
+                    load_sprites(f"Sprites/Boss/23M-RFT70/23M-{i}.png", sprite_size)
+                    for i in range(16, 26)
+                ],
+                "shootready": [
+                    load_sprites(f"Sprites/Boss/23M-RFT70/23M-{i}.png", sprite_size)
+                    for i in range(26, 31)
+                ],
+                "shoot": [
+                    load_sprites(f"Sprites/Boss/23M-RFT70/23M-{i}.png", sprite_size)
+                    for i in range(31, 43)
+                ],
+                "strikeready": [
+                    load_sprites(f"Sprites/Boss/23M-RFT70/23M-{i}.png", sprite_size)
+                    for i in range(43, 46)
+                ],
+                "falling": [
+                    load_sprites(f"Sprites/Boss/23M-RFT70/23M-{i}.png", sprite_size)
+                    for i in range(46, 48)
+                ],
+                "defenseready": [
+                    load_sprites(f"Sprites/Boss/23M-RFT70/23M-{i}.png", sprite_size)
+                    for i in range(48, 51)
+                ],
+                "defense": [
+                    load_sprites("Sprites/Boss/23M-RFT70/23M-51.png", sprite_size)
+                ],
+                "attackready": [
+                    load_sprites(f"Sprites/Boss/23M-RFT70/23M-{i}.png", sprite_size)
+                    for i in range(52, 54)
+                ],
+                "attack": [
+                    load_sprites(f"Sprites/Boss/23M-RFT70/23M-{i}.png", sprite_size)
+                    for i in range(54, 57)
+                ],
+                "counter": [
+                    load_sprites("Sprites/Boss/23M-RFT70/23M-57.png", sprite_size)
+                ],
+                "stunned": [
+                    load_sprites(f"Sprites/Boss/23M-RFT70/23M-{i}.png", sprite_size)
+                    for i in range(58, 61)
+                ],
             }
         self.sprites = Boss23M.sprite_cash
         self.current_animation = "appear"
 
-        self.phase = 1               
-        self.state = "spawning"      
-        self.spawn_timer = 2.0
+        self.phase = 1
+        self.state = "spawning"
+        self.spawn_timer = 0.8
         self.invincible = True
-
-        self.attack_cooldown_phase1 = 3.0
-        self.attack_cooldown_phase2 = 2.0
-        self.attack_cooldown = self.attack_cooldown_phase1
+        self.attack_cooldown = 1.5
         self.attack_timer = 0.0
 
         self.current_pattern = None
         self.pattern_step = 0
         self.pattern_timer = 0.0
- 
+
         self.ground_y_offset = 300
-        self.move_speed = 400
-        self.teleport_cooldown = 0.0
+        self.move_speed = 1000
+        self.y_velocity = 0
 
-        self._cached_laser_base_angle = 0.0
+        self.edge_shredding_state = None
+        self.edge_shredding_teleport_count = 0
+        self.guard_damage_taken = 0
+        self.guard_damage_limit = 300
 
-        self._defense_active = False
-        self.was_hit_during_defense = False
+        self.boss_attack_term = 0.03
+        self.boss_attack_duration = 1.0
+        self.boss_pose_duration = 1.0
+        self.boss_wave_effect_duration = 3.0
+        
+        self.cutting_dimension_uses = 0
+
+        self.idle_target_x = None
+        self.idle_target_y = None
+        self.idle_move_speed = 600
+        self.idle_target_change_timer = 0.0
+        self.idle_target_change_interval = 0.05
+
 
     def take_damage(self, damage, is_forcing=False):
+        if self.invincible:
+            return False
+
+        if (
+            self.state == "attacking"
+            and self.current_pattern == "edge_shredding"
+            and self.edge_shredding_state == "guarding"
+        ):
+            self.guard_damage_taken += damage
+            if self.guard_damage_taken >= self.guard_damage_limit:
+                self.state = "stunned"
+                self.pattern_timer = 0.0
+            return False
+
+        if (
+            self.state == "attacking"
+            and self.current_pattern == "edge_shredding"
+            and self.edge_shredding_state == "spinning"
+        ):
+            self.edge_shredding_state = "counter_triggered"
+            return False
+
         took = super().take_damage(damage, is_forcing)
-        if self.state == "attacking" and self.current_pattern == "defense_counter" and self._defense_active:
-            self.was_hit_during_defense = True
         return took
 
     def enter_phase2(self):
         self.phase = 2
-        self.attack_cooldown = self.attack_cooldown_phase2
+        self.guard_damage_limit = 500
+        self.boss_attack_term = 0.01
+        self.boss_attack_duration = 2.0
+        self.boss_pose_duration = 1.5
+        self.boss_wave_effect_duration = 4.0
+        self.attack_cooldown = 1.0
 
-    def update(self, delta, player, camera, pulses, lasers, platforms):
+    def update(self, delta, player, camera, pulses, lasers, platforms, after_images):
         if self.HP <= 0 and self.state != "dead":
             self.state = "dead"
             self.current_animation = "stunned"
+            self.active = False
 
         if self.state == "dead":
             self.update_animation(delta)
+            return
+
+        if self.state == "stunned":
+            self.current_animation = "stunned"
+            stun_duration = 3.0
+            self.pattern_timer += delta
+            if self.pattern_timer >= stun_duration:
+                self.state = "idle"
+                self.pattern_timer = 0.0
+                self.attack_timer = 0.0
             return
 
         if self.state == "spawning":
@@ -1870,51 +2041,134 @@ class Boss23M(Enemy):
             self.update_animation(delta)
             return
 
-        if self.phase == 1 and self.HP <= self.max_HP * 0.1:
-            self.enter_phase2()
-
-        self.attack_timer += delta
-        if self.teleport_cooldown > 0:
-            self.teleport_cooldown -= delta
-
         if self.state == "attacking":
-            self.update_pattern(delta, player, camera, pulses, lasers, platforms)
+            
+            self.update_pattern(
+                delta, player, camera, pulses, lasers, platforms, after_images
+            )
         else:
+            if self.phase == 1 and self.HP <= 500:
+                self.enter_phase2()
+            
+            self.attack_timer += delta
+            self.idle_target_change_timer += delta
+            
+            screen_top = abs(camera.camera_y)
+            screen_bottom = screen_top + SCREEN_HEIGHT
+            
+            current_screen_y = self.y - screen_top
+            if current_screen_y < 0 or current_screen_y > SCREEN_HEIGHT:
+                self.idle_target_change_timer = self.idle_target_change_interval
+            
+            if self.idle_target_x is None or self.idle_target_change_timer >= self.idle_target_change_interval:
+                margin = 100
+                self.idle_target_x = random.randint(margin, SCREEN_WIDTH - margin - self.width)
+                
+                target_screen_offset = random.uniform(SCREEN_HEIGHT * 0.2, SCREEN_HEIGHT * 0.6)
+                self.idle_target_y = screen_top + target_screen_offset
+                self.idle_target_change_timer = 0.0
+            
+            if self.idle_target_x is not None and self.idle_target_y is not None:
+                distance_to_target = math.hypot(
+                    self.idle_target_x - self.x,
+                    self.idle_target_y - self.y
+                )
+                
+                if distance_to_target > 10:
+                    move_x = (self.idle_target_x - self.x) / distance_to_target * self.idle_move_speed * delta
+                    move_y = (self.idle_target_y - self.y) / distance_to_target * self.idle_move_speed * delta
+                    
+                    self.x += move_x
+                    self.x = max(0, min(self.x, SCREEN_WIDTH - self.width))
+                    
+                    self.y += move_y
+                    self.y = max(screen_top, min(self.y, screen_bottom - self.height))
+                else:
+                    self.x = self.idle_target_x
+                    self.y = self.idle_target_y
+            
+            self.current_animation = "idle"
+            
             if self.attack_timer >= self.attack_cooldown:
                 self.choose_next_pattern(player)
                 self.state = "attacking"
                 self.pattern_step = 0
                 self.pattern_timer = 0.0
                 self.attack_timer = 0.0
+    
+            
+            if self.idle_target_x is not None and self.idle_target_y is not None:
+                distance_to_target = math.hypot(
+                    self.idle_target_x - self.x,
+                    self.idle_target_y - self.y
+                )
+    
+                if distance_to_target > 10:
+                    move_x = (self.idle_target_x - self.x) / distance_to_target * self.idle_move_speed * delta
+                    move_y = (self.idle_target_y - self.y) / distance_to_target * self.idle_move_speed * delta
+        
+                    self.x += move_x
+                    self.x = max(0, min(self.x, SCREEN_WIDTH - self.width))
+                    self.y += move_y
+                    screen_top = abs(camera.camera_y)
+                    screen_bottom = screen_top + SCREEN_HEIGHT
+
+                    if self.y < screen_top:
+                        self.y = screen_top
+
+                    if self.y + self.height > screen_bottom:
+                        self.y = screen_bottom - self.height                    
+                    self.current_animation = "idle"
+                else:
+                    self.x = self.idle_target_x
+                    self.y = self.idle_target_y
+
+        if self.attack_timer >= self.attack_cooldown:
+            self.choose_next_pattern(player)
+            self.state = "attacking"
+            self.pattern_step = 0
+            self.pattern_timer = 0.0
+            self.attack_timer = 0.0
 
         self.update_animation(delta)
 
     def choose_next_pattern(self, player):
-        patterns_phase1 = ["dimension_strike", "ground_shock", "edge_shredding"]
-        patterns_phase2 = ["dimension_strike", "ground_shock", "edge_shredding",
-                           "trembling_slash", "defense_counter", "cutting_dimension"]
+        patterns_phase1 = ["edge_shredding", "trembling_slash", "dimension_strike", "cutting_dimension", "cutting_dimension"]
+        patterns_phase2 = ["edge_shredding", "trembling_slash", "dimension_strike"]
+        
+        if self.cutting_dimension_uses < 2:
+            patterns_phase2.append("cutting_dimension")
+
+        x_dist = abs(self.x - player.x)
+        if x_dist > 100:
+            if "trembling_slash" in patterns_phase1: 
+                patterns_phase1.remove("trembling_slash")
+            if "trembling_slash" in patterns_phase2: 
+                patterns_phase2.remove("trembling_slash")
+        
+        if self.y >= player.y:
+            if "dimension_strike" in patterns_phase1: 
+                patterns_phase1.remove("dimension_strike")
+            if "dimension_strike" in patterns_phase2: 
+                patterns_phase2.remove("dimension_strike")
 
         if self.phase == 1:
             pool = patterns_phase1
         else:
             pool = patterns_phase2
+        
+        if not pool:
+            pool = ["edge_shredding"]
 
         self.current_pattern = random.choice(pool)
-        if self.current_pattern != "defense_counter":
-            self._defense_active = False
-            self.was_hit_during_defense = False
 
-    def update_pattern(self, delta, player, camera, pulses, lasers, platforms):
+    def update_pattern(self, delta, player, camera, pulses, lasers, platforms, after_images):
         if self.current_pattern == "dimension_strike":
-            done = self.pattern_dimension_strike(delta, player, camera, lasers)
-        elif self.current_pattern == "ground_shock":
-            done = self.pattern_ground_shock(delta, player, camera, pulses)
+            done = self.pattern_dimension_strike(delta, player, camera, pulses, platforms)
         elif self.current_pattern == "edge_shredding":
             done = self.pattern_edge_shredding(delta, player, camera, pulses)
         elif self.current_pattern == "trembling_slash":
-            done = self.pattern_trembling_slash(delta, player, camera, lasers)
-        elif self.current_pattern == "defense_counter":
-            done = self.pattern_defense_counter(delta, player, camera, pulses)
+            done = self.pattern_trembling_slash(delta, player, camera, after_images)
         elif self.current_pattern == "cutting_dimension":
             done = self.pattern_cutting_dimension(delta, player, camera, lasers)
         else:
@@ -1924,214 +2178,256 @@ class Boss23M(Enemy):
             self.state = "idle"
             self.current_pattern = None
             self.current_animation = "idle"
-            self._defense_active = False
-            self.was_hit_during_defense = False
 
-    def pattern_dimension_strike(self, delta, player, camera, lasers):
+    def check_platform_collision(self, platforms):
+        boss_rect = self.get_rect()
+        for platform in platforms:
+            platform_rect = platform.get_rect()
+            if boss_rect.colliderect(platform_rect):
+                if (
+                    self.y_velocity >= 0
+                    and boss_rect.bottom > platform_rect.top
+                    and boss_rect.top < platform_rect.top
+                ):
+                    return platform
+        return None
+
+    def pattern_dimension_strike(self, delta, player, camera, pulses, platforms):
         self.pattern_timer += delta
 
         if self.pattern_step == 0:
-            self.current_animation = "shootready"
-            self.y = abs(camera.camera_y) + self.ground_y_offset
-
-            dx = (player.x + player.width // 2) - (self.x + self.width // 2)
-            dy = (player.y + player.height // 2) - (self.y + self.height // 2)
-            base_angle = math.atan2(dy, dx)
-            self._cached_laser_base_angle = base_angle
-
-            if self.pattern_timer >= 0.5:
-                self.fire_laser_volley(camera, lasers, volley_index=0)
-                self.current_animation = "shoot"
+            self.current_animation = "strikeready"
+            target_x = player.x
+            self.x += (target_x - self.x) * 0.1
+            self.y = player.y - 400
+            if abs(self.x - target_x) < 20:
                 self.pattern_step = 1
                 self.pattern_timer = 0.0
+                self.y_velocity = 0
+                self._ds_breaks = 0
+
         elif self.pattern_step == 1:
-            if self.pattern_timer >= 0.3:
-                self.fire_laser_volley(camera, lasers, volley_index=1)
+            self.current_animation = "falling"
+            self.y_velocity += 12000 * delta
+            self.y += self.y_velocity * delta
+
+            max_fall_time = 15.0
+            if self.pattern_timer >= max_fall_time:
                 self.pattern_step = 2
                 self.pattern_timer = 0.0
 
-        elif self.pattern_step == 2:
-            if self.pattern_timer >= 0.6:
-                return True
+            if self.get_rect().colliderect(player.get_rect()):
+                if player.take_damage(1):
+                    if player.coord_debuff_active:
+                        self.teleport_player_down(player, platforms, 3)
+                    player.apply_coord_debuff()
+                    player.apply_stun()
+                self.pattern_step = 2
+                self.y_velocity = 0
 
-        return False
-
-    def fire_laser_volley(self, camera, lasers, volley_index):
-        base_angle = self._cached_laser_base_angle
-
-        if volley_index == 1:
-            base_angle += math.radians(30)
-
-        spread = math.radians(15)
-        angles = [base_angle - spread, base_angle, base_angle + spread]
-
-        start_x = self.x + self.width // 2
-        start_y = self.y + self.height // 2
-        damage = 50
-        max_length = 2000
-
-        for ang in angles:
-            beam = LaserBeam(start_x, start_y, ang, damage,
-                             max_length=max_length, camera=camera, dagger=None)
-            beam.needs_raycast = True
-            lasers.append(beam)
-
-    def pattern_ground_shock(self, delta, player, camera, pulses):
-        self.pattern_timer += delta
-
-        if self.pattern_step == 0:
-            self.current_animation = "shootready"
-            self.y = abs(camera.camera_y) + self.ground_y_offset
-            if self.pattern_timer >= 0.6:
-                effect = {"damage": 1, "knockback": (0, -800)}
+            collided_platform = self.check_platform_collision(platforms)
+            if collided_platform:
+                if isinstance(collided_platform, BreakablePlatform) and self._ds_breaks < 2:
+                    collided_platform.break_platform(None)
+                    self._ds_breaks += 1
+                else:
+                    self.y = collided_platform.y - self.height
+                    self.y_velocity = 0
+                    
+                effect = {"coord_debuff": True, "damage": 1}
                 pulse = PulseWave(
                     x=self.x + self.width // 2,
-                    y=self.y + self.height // 2,
+                    y=self.y + self.height,
                     initial_radius=10,
-                    max_radius=260,
+                    max_radius=500,
                     thickness=20,
-                    growth_speed=450,
+                    growth_speed=1000,
                     color=BLUE,
-                    filled=False,
                     effect=effect,
                 )
                 pulses.append(pulse)
-                self.pattern_step = 1
-                self.pattern_timer = 0.0
+                self.pattern_step = 2
 
-        elif self.pattern_step == 1:
-            if self.pattern_timer >= 0.5:
+        elif self.pattern_step == 2:
+            if self.pattern_timer >= 1.0:
                 return True
 
         return False
+
+    def teleport_player_down(self, player, platforms, num_platforms):
+        sorted_platforms = sorted(platforms, key=lambda p: p.y, reverse=False)
+        current_idx = -1
+        for i, p in enumerate(sorted_platforms):
+            if player.y <= p.y:
+                current_idx = i
+                break
+
+        target_idx = current_idx + num_platforms
+        if 0 <= target_idx < len(sorted_platforms):
+            target_platform = sorted_platforms[target_idx]
+            player.x = (
+                target_platform.x + target_platform.width // 2 - player.width // 2
+            )
+            player.y = target_platform.y - player.height - 10
+            player.y_velocity = 0
 
     def pattern_edge_shredding(self, delta, player, camera, pulses):
         self.pattern_timer += delta
 
         if self.pattern_step == 0:
-            self.current_animation = "strikeready"
-            offset_x = 250 * (1 if random.random() < 0.5 else -1)
-            self.x = max(100, min(player.x + offset_x, SCREEN_WIDTH - 200))
-            self.y = abs(camera.camera_y) - 150
-            if self.pattern_timer >= 0.4:
-                self.pattern_step = 1
-                self.pattern_timer = 0.0
+            self.edge_shredding_teleport_count = 0
+            self.pattern_step = 1
+            self.pattern_timer = 0.0
 
         elif self.pattern_step == 1:
-            self.current_animation = "falling"
-            fall_speed = 3000
-            self.y += fall_speed * delta
-            target_y = abs(camera.camera_y) + self.ground_y_offset
-            if self.y >= target_y:
-                self.y = target_y
-                effect = {"damage": 2, "knockback": (0, -1200)}
+            if self.pattern_timer >= 0.05:
+                if self.edge_shredding_teleport_count >= 5:
+                    self.pattern_step = 3
+                    return False
+                
+                screen_top = abs(camera.camera_y)
+                margin = 100
+                self.x = random.randint(margin, SCREEN_WIDTH - margin - self.width)
+                
+                teleport_y_offset = random.uniform(SCREEN_HEIGHT * 0.3, SCREEN_HEIGHT * 0.6)
+                self.y = screen_top + teleport_y_offset
+                
+                self.edge_shredding_teleport_count += 1
+                
+                effect = {
+                    "knockback": (200 * (-1 if self.x > player.x else 1), -300),
+                    "coord_debuff": True,
+                }
                 pulse = PulseWave(
                     x=self.x + self.width // 2,
-                    y=self.y + self.height,
-                    initial_radius=15,
-                    max_radius=280,
-                    thickness=25,
-                    growth_speed=500,
+                    y=self.y + self.height // 2,
+                    initial_radius=10,
+                    max_radius=500,
+                    thickness=15,
+                    growth_speed=1000,
                     color=BLUE,
-                    filled=False,
-                    effect=effect,
+                    effect=effect
                 )
                 pulses.append(pulse)
+                
+                self.edge_shredding_state = random.choice(['attackable', 'guarding', 'spinning'])
+                self.pattern_timer = 0.0
+                self.pattern_step = 2
+                self.guard_damage_taken = 0
+            
+            if self.pattern_timer >= 0.05:
                 self.pattern_step = 2
                 self.pattern_timer = 0.0
 
         elif self.pattern_step == 2:
-            if self.pattern_timer >= 0.6:
-                return True
+            sub_state_duration = self.boss_pose_duration
 
-        return False
-
-    def pattern_trembling_slash(self, delta, player, camera, lasers):
-        self.pattern_timer += delta
-
-        if self.pattern_step == 0:
-            self.current_animation = "attackready"
-            if self.pattern_timer >= 0.3:
-                offset_x = 200 * (1 if random.random() < 0.5 else -1)
-                self.x = max(100, min(player.x + offset_x, SCREEN_WIDTH - 200))
-                self.y = abs(camera.camera_y) + self.ground_y_offset
-                self._slash_count = 0
-                self.pattern_step = 1
-                self.pattern_timer = 0.0
-
-        elif self.pattern_step == 1:
-            if self.pattern_timer >= 0.25:
+            if self.edge_shredding_state == "attackable":
                 self.current_animation = "attack"
-                self._slash_count += 1
-                dx = (player.x + player.width // 2) - (self.x + self.width // 2)
-                dy = (player.y + player.height // 2) - (self.y + self.height // 2)
-                ang = math.atan2(dy, dx)
-                damage = 40
-                max_length = 400
-                beam = LaserBeam(
-                    self.x + self.width // 2,
-                    self.y + self.height // 2,
-                    ang,
-                    damage,
-                    max_length=max_length,
-                    camera=camera,
-                    dagger=None,
-                )
-                beam.needs_raycast = True
-                lasers.append(beam)
+                if self.get_rect().colliderect(player.get_rect()):
+                    if player.take_damage(1):
+                        player.apply_coord_debuff()
 
-                self.pattern_timer = 0.0
-                if self._slash_count >= 3:
-                    self.pattern_step = 2
-                    self.pattern_timer = 0.0
-
-        elif self.pattern_step == 2:
-            if self.pattern_timer >= 0.5:
-                return True
-
-        return False
-
-
-    def pattern_defense_counter(self, delta, player, camera, pulses):
-        self.pattern_timer += delta
-
-        if self.pattern_step == 0:
-            self.current_animation = "defenseready"
-            if self.pattern_timer >= 0.3:
+            elif self.edge_shredding_state == "guarding":
                 self.current_animation = "defense"
-                self._defense_active = True
-                self.was_hit_during_defense = False
-                self.pattern_step = 1
-                self.pattern_timer = 0.0
 
-        elif self.pattern_step == 1:
-            guard_duration = 2.0
-            if self.pattern_timer >= guard_duration:
-                self.pattern_step = 2
-                self.pattern_timer = 0.0
-
-        elif self.pattern_step == 2:
-            if self.was_hit_during_defense:
+            elif self.edge_shredding_state == "spinning":
                 self.current_animation = "counter"
-                if self.pattern_timer == 0.0:
-                    effect = {"damage": 2, "knockback": (0, -1500)}
+
+            elif self.edge_shredding_state == "counter_triggered":
+                self.x = player.x - 100 if player.facing > 0 else player.x + 100
+                self.y = player.y
+                if self.pattern_timer >= self.boss_attack_duration / 2:
+                    effect = {"damage": 1, "coord_debuff": True}
                     pulse = PulseWave(
                         x=self.x + self.width // 2,
                         y=self.y + self.height // 2,
                         initial_radius=10,
-                        max_radius=220,
-                        thickness=25,
-                        growth_speed=600,
+                        max_radius=500,
+                        thickness=10,
+                        growth_speed=1000,
                         color=BLUE,
-                        filled=False,
                         effect=effect,
                     )
                     pulses.append(pulse)
-                if self.pattern_timer >= 0.7:
-                    return True
-            else:
-                if self.pattern_timer >= 0.3:
-                    return True
+                    self.pattern_step = 1
+                    self.pattern_timer = 0.0
+
+            if (
+                self.pattern_timer >= sub_state_duration
+                and self.edge_shredding_state != "counter_triggered"
+            ):
+                self.pattern_step = 1
+                self.pattern_timer = 0.0
+
+        elif self.pattern_step == 3:
+            return True
+
+        return False
+
+    def pattern_trembling_slash(self, delta, player, camera, after_images):
+        self.pattern_timer += delta
+
+        if self.pattern_step == 0:
+            self.current_animation = "strikeready"
+            if self.pattern_timer >= 0.5:
+                dx = player.x - self.x
+                dy = player.y - self.y
+                dist = math.hypot(dx, dy)
+                self._dash_duration = 0.3
+                self._dash_vx = (
+                    (dx / dist) * (dist / self._dash_duration) if dist > 0 else 0
+                )
+                self._dash_vy = (
+                    (dy / dist) * (dist / self._dash_duration) if dist > 0 else 0
+                )
+
+                self.pattern_step = 1
+                self.pattern_timer = 0.0
+                self._dash_count = 0
+                self._afterimage_timer = 0.0
+
+        elif self.pattern_step == 1 or self.pattern_step == 3:
+            self.current_animation = "attack"
+
+            self.x += self._dash_vx * delta
+            self.y += self._dash_vy * delta
+
+            self._afterimage_timer += delta
+            if self._afterimage_timer > 0.05:
+                self._afterimage_timer = 0.0
+                sprite = self.sprites[self.current_animation][self.animation_frame]
+                facing = 1 if self._dash_vx > 0 else -1
+                img = AfterImage(self.x, self.y, sprite, 0.5, facing)
+                after_images.append(img)
+
+            if self.pattern_timer >= self._dash_duration:
+                self._dash_count += 1
+                if self._dash_count >= 2:
+                    self.pattern_step = 4
+                else:
+                    self.pattern_step += 1
+                self.pattern_timer = 0.0
+
+        elif self.pattern_step == 2:
+            self.current_animation = "idle"
+            pause_duration = 0.5
+            if self.pattern_timer >= pause_duration:
+                dx = player.x - self.x
+                dy = player.y - self.y
+                dist = math.hypot(dx, dy)
+                self._dash_vx = (
+                    (dx / dist) * (dist / self._dash_duration) if dist > 0 else 0
+                )
+                self._dash_vy = (
+                    (dy / dist) * (dist / self._dash_duration) if dist > 0 else 0
+                )
+
+                self.pattern_step = 3
+                self.pattern_timer = 0.0
+
+        elif self.pattern_step == 4:
+            return True
 
         return False
 
@@ -2140,39 +2436,60 @@ class Boss23M(Enemy):
 
         if self.pattern_step == 0:
             self.current_animation = "shootready"
-            self.y = abs(camera.camera_y) + self.ground_y_offset
-            if self.pattern_timer >= 0.8:
-                self._cd_shots_done = 0
-                self.pattern_step = 1
-                self.pattern_timer = 0.0
+            screen_top = abs(camera.camera_y)
+            self.x = 50 if player.x > SCREEN_WIDTH / 2 else SCREEN_WIDTH - 150
+            self.y = screen_top + SCREEN_HEIGHT * 0.4
+            
+            self.pattern_step = 1
+            self.pattern_timer = 0.0
+            self.cutting_dimension_uses += 1
+            self._cd_shot_count = 0
 
         elif self.pattern_step == 1:
-            shot_interval = 0.3
-            max_shots = 6
-            if self.pattern_timer >= shot_interval and self._cd_shots_done < max_shots:
+            if self.pattern_timer >= 0.5 and self._cd_shot_count == 0:
+                self.fire_cutting_dimension_volley(player, camera, lasers)
+                self._cd_shot_count += 1
                 self.pattern_timer = 0.0
-                self._cd_shots_done += 1
-
-                rand_x = random.randint(100, SCREEN_WIDTH - 100)
-                start_y = abs(camera.camera_y) - 50
-                angle = math.pi / 2
-                damage = 40
-                max_length = SCREEN_HEIGHT * 1.5
-                beam = LaserBeam(rand_x, start_y, angle, damage,
-                                 max_length=max_length, camera=camera, dagger=None)
-                beam.needs_raycast = True
-                lasers.append(beam)
-
-            if self._cd_shots_done >= max_shots and self.pattern_timer >= 0.5:
+            
+            if self.pattern_timer >= 0.5 and self._cd_shot_count == 1:
+                self.fire_cutting_dimension_volley(player, camera, lasers)
+                self._cd_shot_count += 1
                 self.pattern_step = 2
                 self.pattern_timer = 0.0
 
         elif self.pattern_step == 2:
-            if self.pattern_timer >= 0.8:
+            if self.pattern_timer >= 1.5:
                 return True
 
         return False
-    
+
+    def fire_cutting_dimension_volley(self, player, camera, lasers):
+        dx = (player.x + player.width // 2) - (self.x + self.width // 2)
+        dy = (player.y + player.height // 2) - (self.y + self.height // 2)
+        base_angle = math.atan2(dy, dx)
+
+        angles = [base_angle - math.radians(15), base_angle, base_angle + math.radians(15)]
+
+        start_x = self.x + self.width // 2
+        start_y = self.y + self.height // 2
+        damage = 50
+        max_length = 2000
+
+        for ang in angles:
+            beam = LaserBeam(
+                start_x,
+                start_y,
+                ang,
+                damage,
+                max_length=max_length,
+                camera=camera,
+                dagger=None
+            )
+            beam.needs_raycast = True
+            beam.camera = camera
+            beam.is_boss_laser = True
+            lasers.append(beam)
+
     def draw(self, surface, camera):
         super().draw(surface, camera)
 
@@ -2308,8 +2625,6 @@ class EnemySpawner:
     def draw(self, camera, surface):
         for enemy in self.enemies:
             enemy.draw(surface, camera)
-
-# 플랫폼
 
 class PlatformGen:
     def __init__(self):
@@ -2468,7 +2783,6 @@ class BreakablePlatform(PlatformBase):
         return self.broken
 
     
-# 게임
 class Game:
     def __init__(self):
         self.clock = pygame.time.Clock()
@@ -2502,6 +2816,7 @@ class Game:
         self.current_pulses = []
         self.current_lasers = []
         self.debrises = []
+        self.after_images = []
 
         self.depth_checker = DepthChecker()
         self.current_event = 'Normal'
@@ -2512,6 +2827,10 @@ class Game:
         self.upgrade_shown_depths = set()
         self.selected_upgrades = []
         self.upgrade_ui = UpgradeUI()
+
+        self.boss = None
+        self.boss_fight_active = False
+        self.boss_fight_start_depth = 0
 
         self.max_combo = 0
         self.current_combo = 0
@@ -2567,6 +2886,8 @@ class Game:
 
         self.PlatformGenerator.draw(self.camera, self.game_surface)
         for pulse in self.current_pulses:
+            if hasattr(pulse, 'is_player_owned') and pulse.is_player_owned:
+                continue
             pulse.draw(self.game_surface, self.camera)
         for laser in self.current_lasers:
             laser.draw(self.game_surface, self.camera)
@@ -2583,9 +2904,28 @@ class Game:
 
         self.upgrade_ui.draw(self.game_surface)
 
+    def start_boss_fight(self):
+        self.boss_fight_active = True
+        self.boss = Boss23M(SCREEN_WIDTH // 2 - 64, abs(self.camera.camera_y) + 200)
+        
+        self.camera.scroll_active = False
+        self.depth_checker.active = False
+        self.boss_fight_start_depth = self.depth_checker.depth
+
+    def end_boss_fight(self):
+        self.boss_fight_active = False
+        self.boss = None
+        
+        resume_depth = 75000
+        self.depth_checker.depth = resume_depth
+        self.camera.camera_y = -resume_depth
+        self.player.y = abs(self.camera.camera_y) + SCREEN_HEIGHT * 0.65
+        
+        self.camera.scroll_active = True
+        self.depth_checker.active = True
+
     def apply_upgrade(self, upgrade_name):
         self.selected_upgrades.append(upgrade_name)
-
         if upgrade_name == "FocusingSight":
             self.player.weapon.laser_width_multiplier= 4
             self.player.weapon.cooldown = 0.05
@@ -2617,6 +2957,19 @@ class Game:
         elif upgrade_name == "MechanicalBlood":
             self.player.blood_heal_enabled = True
             self.player.blood_kill_count = 0
+    
+    def check_boss_laser_hit_player(self, laser, player, camera):
+        player_rect = player.get_rect()
+        screen_y = camera.draw_again(player.y)
+        player_rect.y = screen_y
+    
+        distance = laser.line_rect_intersection(
+            laser.start_x, laser.start_y,
+            laser.end_x, laser.end_y,
+            player_rect
+        )
+    
+        return distance is not None
 
     def run(self):
         delta = clock.tick(FPS) / 900
@@ -2629,17 +2982,23 @@ class Game:
 
         self.world_timer += delta
 
-        self.current_event, self.weapon_select_flag, pattern_change = self.depth_checker.update(delta, self.camera.camera_y)
+        if not self.boss_fight_active:
+            self.current_event, self.weapon_select_flag, pattern_change = self.depth_checker.update(delta, self.camera.camera_y)
+        else:
+            pattern_change = None
+
+        if self.current_event == "23M-RFT70 Appeared." and self.boss is None and not self.boss_fight_active:
+            self.start_boss_fight()
 
         upgrade_trigger_per_depth = 15000
         upgrade_triggered_per_depth = int(self.depth_checker.depth // upgrade_trigger_per_depth)
 
-        if not self.in_upgrade and upgrade_triggered_per_depth > 0:
+        if not self.in_upgrade and not self.boss_fight_active and upgrade_triggered_per_depth > 0:
             for marker in range(1, upgrade_triggered_per_depth + 1):
                 if marker not in self.upgrade_shown_depths:
                     self.start_upgrade_UI(marker)
                     break
-
+        
         if pattern_change:
             if pattern_change.get("enemy_pattern") is not None:
                 self.enemy_spawner.change_pattern(pattern_change.get("enemy_pattern"))
@@ -2677,22 +3036,64 @@ class Game:
         self.player.update(delta, self.PlatformGenerator.platforms, self.debrises, self.current_attacks, self.camera)
         
         if self.player.hitstop_timer <= 0:
-            self.camera.camera_chase(delta, self.player)
-            self.enemy_spawner.update(self.camera, self.current_event, self.PlatformGenerator.platforms)
 
+            if self.boss_fight_active:
+                self.camera.camera_chase(delta, self.player)
+            else:
+                self.camera.camera_chase(delta, self.player)
+                self.enemy_spawner.update(self.camera, self.current_event, self.PlatformGenerator.platforms)
+
+
+            if self.boss:
+                self.boss.update(delta, self.player, self.camera, self.current_pulses, self.current_lasers, self.PlatformGenerator.platforms, self.after_images)
+                if self.boss.HP <= 0:
+                    self.end_boss_fight()
+                elif self.player.get_rect().colliderect(self.boss.get_rect()):
+                    if self.player.hitstop_timer <= 0:
+                        self.player.take_damage(1)
+                for i in range(len(self.current_lasers) - 1, -1, -1):
+                    laser = self.current_lasers[i]
+                    if isinstance(laser, LaserBeam):
+                        laser.update(delta)
+                        
+                        if not laser.active:
+                            self.current_lasers.pop(i)
+                            continue
+                        
+                        targets = self.enemy_spawner.enemies[:]
+                        if self.boss:
+                            targets.append(self.boss)
+                        
+                        laser.raycast(targets, self.PlatformGenerator.platforms)
+                    
+                    elif isinstance(laser, DoomLaser):
+                        laser.update(delta)
+                        
+                        if laser.state == "releasing" and laser.current_width == 0:
+                            self.current_lasers.pop(i)
+                            continue
+                        
+                        laser.check_collision(self.player, self.camera)
+            
             for attacks in self.current_attacks[:]:
                 if isinstance(attacks, LaserBeam):
                     attacks.update(delta)
                     if not attacks.active:
                         self.current_attacks.remove(attacks)
                         continue
-                    attacks.raycast(self.enemy_spawner.enemies, self.PlatformGenerator.platforms, self.current_pulses)
+                    
+                    targets = self.enemy_spawner.enemies + ([self.boss] if self.boss else [])
+                    attacks.raycast(targets, self.PlatformGenerator.platforms, self.current_pulses)
+
+                    if self.check_boss_laser_hit_player(attacks, self.player, self.camera):
+                        self.player.take_damage(1)
+
 
             for enemy in self.enemy_spawner.enemies:
                 if isinstance(enemy, FireRobot):
                     enemy.update(delta, self.player, self.camera, self.current_pulses)
                 elif isinstance(enemy, RangedRobot):
-                    enemy.update(delta, self.player, self.PlatformGenerator.platforms, self.camera, self.current_lasers)
+                    enemy.update(delta, self.player, self.PlatformGenerator.platforms, self.camera, self.current_attacks)
                 else:
                     enemy.update(delta, self.player)
             
@@ -2703,36 +3104,63 @@ class Game:
                         self.player.take_damage(1)
         
             for i in range(len(self.current_pulses) - 1, -1, -1):
-                self.current_pulses[i].update(delta)
-
-                effect = self.current_pulses[i].check_collision_enemy(self.player)
-
+                pulse = self.current_pulses[i]
+                pulse.update(delta)
+    
+                effect = pulse.check_collision_enemy(self.player)
                 if effect:
-                    if "knockback" in effect:
-                        kb_x, kb_y = effect['knockback']
-                        self.player.x_velocity += kb_x
-                        self.player.y_velocity += kb_y
-                
-                for enemy in self.enemy_spawner.enemies:
-                    for pulse in self.current_pulses:
-                        pulse.check_collision_enemy(enemy)
-                
-                if not self.current_pulses[i].active:
-                    self.current_pulses.pop(i)
+                    if "coord_debuff" in effect:
+                        if self.player.coord_debuff_active:
+                            if self.boss:
+                                self.boss.teleport_player_down(self.player, self.PlatformGenerator.platforms, 3)
+                        else:
+                            self.player.apply_coord_debuff()
         
-            for i in range(len(self.current_lasers) - 1, -1, -1):
-                laser = self.current_lasers[i]
-                laser.update(delta)
-
-                effect = laser.check_collision(self.player, self.camera)
-                if effect:
+                    if "slow" in effect:
+                        self.player.apply_slow()
+        
                     if "knockback" in effect:
                         kb_x, kb_y = effect['knockback']
                         self.player.x_velocity += kb_x
                         self.player.y_velocity += kb_y
-
-                if laser.state == 'finished' or laser.stretch_timer > laser.disappearing_duration:
-                    self.current_lasers.pop(i)
+                
+                targets = self.enemy_spawner.enemies + ([self.boss] if self.boss else [])
+                for target in targets:
+                    pulse.check_collision_enemy(target)
+                
+                if not pulse.active:
+                    self.current_pulses.pop(i)
+            
+            for i in range(len(self.after_images) - 1, -1, -1):
+                img = self.after_images[i]
+                img.update(delta)
+                if img.get_rect().colliderect(self.player.get_rect()):
+                    if not self.player.coord_debuff_active:
+                        self.player.apply_coord_debuff()
+                if img.lifetime <= 0:
+                    self.after_images.pop(i)
+        
+            for i in range(len(self.current_attacks) - 1, -1, -1):
+                attack = self.current_attacks[i]
+                if isinstance(attack, LaserBeam):
+                    attack.update(delta)
+                    if not attack.active:
+                        self.current_attacks.pop(i)
+                        continue
+                    if hasattr(attack, 'is_boss_laser'):
+                        player_as_target = [self.player]
+                        attack.raycast(player_as_target, self.PlatformGenerator.platforms, self.current_pulses)
+                    else:
+                        targets = self.enemy_spawner.enemies[:]
+                        if self.boss:
+                            targets.append(self.boss)
+                        attack.raycast(targets, self.PlatformGenerator.platforms, self.current_pulses)
+                elif isinstance(attack, DoomLaser):
+                    attack.update(delta)
+                    if attack.state == "releasing" and attack.current_width == 0 and attack.stretch_timer > attack.disappearing_duration:
+                        self.current_attacks.pop(i)
+                        continue
+                    attack.check_collision(self.player, self.camera)
 
             self.PlatformGenerator.update(self.camera)
 
@@ -2747,12 +3175,18 @@ class Game:
         self.PlatformGenerator.draw(self.camera, self.game_surface)
         for pulse in self.current_pulses:
             pulse.draw(self.game_surface, self.camera)
+        for img in self.after_images:
+            img.draw(self.game_surface, self.camera)
         for laser in self.current_lasers:
             laser.draw(self.game_surface, self.camera)
         self.enemy_spawner.draw(self.camera, self.game_surface)
         self.player.draw(self.game_surface, self.camera)
+        if self.boss:
+            self.boss.draw(self.game_surface, self.camera)
         for attacks in self.current_attacks:
             if isinstance(attacks, LaserBeam):
+                attacks.draw(self.game_surface, self.camera)
+            elif isinstance(attacks, DoomLaser):
                 attacks.draw(self.game_surface, self.camera)
         for debris in self.debrises:
             debris.update(delta)
@@ -2760,10 +3194,9 @@ class Game:
         self.debrises = [d for d in self.debrises if d.lifetime > 0]
         if not game_over:
             draw_health_hud(self.game_surface, self.player, abs(self.depth_checker.depth) / 10000)
+            draw_boss_health_bar(self.game_surface, self.boss)
         screen.blit(self.game_surface, (0, 0))
 
-
-# 보조 클래스
 class UIManager:
     def __init__(self, duration):
         self.duration = duration
@@ -2954,10 +3387,10 @@ class DepthChecker:
             if index >= len(self.events):
                 index = len(self.events) - 1
         
-            current_event = self.events[index]
+            self.current_event = self.events[index]
 
             if not index == self.previous_event_index:
-                self.current_alert_text = current_event
+                self.current_alert_text = self.current_event
                 self.show_alert = True
                 self.alert_text_timer = self.alert_text_duration
                 self.previous_event_index = index
@@ -2980,6 +3413,8 @@ class DepthChecker:
                     }
         
             return (self.events[index], True, pattern_change)
+
+        return (self.current_event, False, None)
 
     def draw_alert(self, screen):
         if not self.show_alert:
