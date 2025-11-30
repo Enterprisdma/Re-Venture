@@ -2,7 +2,7 @@
     "0": {
         "enemy_pattern": [
             "FireRobot",
-            "FireRobot",
+            "None",
             "None"
         ],
         "platform_pattern": ["Normal", "Normal", "Breakable", "Breakable", "Breakable"]
@@ -18,18 +18,25 @@
             "FireRobot",
             "RangedRobot"
         ],
-        "platform_pattern": ["Breakable", "Normal", "Breakable", "Breakable", "Breakable", "Normal", "Breakable", "Breakable"]
+        "platform_pattern": ["Breakable", "Normal", "Breakable", "Normal", "Breakable", "Normal", "Breakable", "Breakable"],
+        "min_gap_y": 80,
+        "max_gap_y": 200
     },
     "15000": {
         "enemy_pattern": [
             "FireRobot",
             "FireRobot",
-            "FireRobot",
             "None",
+            "RangedRobot",
+            "FireRobot",
             "FireRobot",
             "FireRobot",
             "RangedRobot"
         ],
-        "platform_pattern": ["Normal", "Normal", "Breakable", "Breakable", "Normal", "Normal", "Breakable", "Normal"]
+        "platform_pattern": ["Normal", "Normal", "Breakable", "Breakable", "Normal", "Normal", "Breakable", "Normal"],
+        "min_gap_y": 70,
+        "max_gap_y": 150,
+        "min_width": 600,
+        "max_width": 800
     }
 }

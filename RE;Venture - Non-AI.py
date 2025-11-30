@@ -705,8 +705,8 @@ class Player:
         self.y = y
         self.x_velocity = 0
         self.y_velocity = 0
-        self.gravity = 6000
-        self.max_fall_speed = 8000
+        self.gravity = 8000
+        self.max_fall_speed = 4000
         self.accel = 0
         self.is_moving = False
         self.width = 64
@@ -774,7 +774,7 @@ class Player:
             self.bouncing = False
             self.jump_key_held = True
         
-    def Forcing(self):
+    def Forcing(self, delta):
         if self.grounded:
             self.y_velocity = 0
             self.bouncing  = True
@@ -782,7 +782,7 @@ class Player:
             self.diving = False
             return
         elif not self.grounded and self.can_dive and not self.jump_key_held and self.y_velocity > 0:
-            self.y_velocity += self.gravity * 0.3
+            self.y_velocity += self.max_fall_speed * 0.2
             self.state = "forcing"
             self.diving = not self.bouncing
             self.slide_cooldown_timer = 0
@@ -805,7 +805,7 @@ class Player:
     def use_weapon(self, entities):
         self.weapon.execute_action(self, entities)
         
-    def input_manager(self, keys, entities):
+    def input_manager(self, keys, entities, delta):
 
         if self.hitstop_timer > 0:
             return
@@ -837,9 +837,10 @@ class Player:
                 self.jump()
             elif not self.jump_key_held:
                 if not self.invincible:
-                    self.Forcing()
-            elif self.y_velocity >= -500 and self.jump_key_held: 
-                self.Forcing()
+                    self.Forcing(delta)
+            elif self.y_velocity >= -500 and self.jump_key_held:
+                self.jump_key_held = False 
+                self.Forcing(delta)
         else:
             self.jump_key_held = False
 
@@ -950,7 +951,7 @@ class Player:
         keys = pygame.key.get_pressed()
         collision_checking = 8
         collision_checking_term = delta / collision_checking
-        self.input_manager(keys, entities)
+        self.input_manager(keys, entities, delta)
         self.update_animation(delta)
 
         if not self.grounded:
@@ -1078,7 +1079,7 @@ class Dagger:
 # 엔티티
 
 class PulseWave:
-    def __init__(self, x, y, initial_radius, max_radius, thickness, growth_speed, color, filled=False, effect=None):
+    def __init__(self, x, y, initial_radius, max_radius, thickness, growth_speed, color, filled=False, effect=None, owner=None):
         
         self.x = x
         self.y = y
@@ -1093,6 +1094,8 @@ class PulseWave:
         
         self.active = True
         self.hit_player = False
+        self.hit_enemies = set()
+        self.owner = owner
         self.effect = effect if effect else {}
 
         self.fadeout_manager = UIManager(duration=1)
@@ -1137,31 +1140,14 @@ class PulseWave:
                     color
                 )
     
-    def check_collision(self, player):
-        if self.hit_player:
-            return None
-        
-        player_center_x = player.x + player.width // 2
-        player_center_y = player.y + player.height // 2
-        
-        dx = player_center_x - self.x
-        dy = player_center_y - self.y
-        dist = math.hypot(dx, dy)
-         
-        
-        if self.filled:
-            if dist <= self.radius:
-                self.hit_player = True
-                return self.effect
-            else:
-                outline = 30
-                if abs(dist - self.radius) < outline:
-                    self.hit_player = True
-                    return self.effect
-        return None
-
     def check_collision_enemy(self, enemy):
         if not self.active:
+            return None
+        
+        if id(enemy) in self.hit_enemies:
+            return None
+    
+        if self.owner and enemy is self.owner:
             return None
 
         enemy_rect = enemy.get_rect()
@@ -1179,6 +1165,8 @@ class PulseWave:
             hit = abs(dist - self.radius) < outline
 
         if hit:
+            self.hit_enemies.add(id(enemy))
+        
             dmg = self.effect.get("damage", 0)
             if dmg > 0:
                 enemy.take_damage(dmg)
@@ -1435,6 +1423,7 @@ class LaserBeam:
                 color=WHITE,
                 filled=False,
                 effect=effect,
+                owner=self
             )
             pulses.append(pulse)
 
@@ -1644,7 +1633,8 @@ class FireRobot(Enemy):
             growth_speed = 300,
             color = ORANGE,
             filled = False,
-            effect = effect
+            effect = effect,
+            owner=self
         )
     
         pulses.append(pulse)
@@ -1664,7 +1654,7 @@ class RangedRobot(Enemy):
         self.max_laser_radius = 200.0
 
         self.timer = 0
-        self.idle_time = 1.0
+        self.idle_time = 0.5
         self.ready_time = self.idle_time + 1.0
         self.fire_time = self.ready_time + 1.0
 
@@ -1800,6 +1790,392 @@ class RangedRobot(Enemy):
 
     def draw(self, surface, camera):
         super().draw(surface, camera)
+
+class Boss23M(Enemy):
+    sprite_cash = None
+
+    def __init__(self, x, y):
+        boss_hp = 10000
+        sprite_size = (128, 128)
+        super().__init__(boss_hp, sprite_size, False, x, y)
+
+        if Boss23M.sprite_cash is None:
+            Boss23M.sprite_cash = {
+                "appear":       [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(1, 16)],
+                "idle":         [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(16, 26)],
+                "shootready":   [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(26, 31)],
+                "shoot":        [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(31, 43)],
+                "strikeready":  [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(43, 46)],
+                "falling":      [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(46, 48)],
+                "defenseready": [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(48, 51)],
+                "defense":      [load_sprites("Sprites/Boss/23M-RFT70/23M_51.png", sprite_size)],
+                "attackready":  [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(52, 54)],
+                "attack":       [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(54, 57)],
+                "counter":      [load_sprites("Sprites/Boss/23M-RFT70/23M_57.png", sprite_size)],
+                "stunned":      [load_sprites(f"Sprites/Boss/23M-RFT70/23M_{i}.png", sprite_size) for i in range(58, 61)],
+            }
+        self.sprites = Boss23M.sprite_cash
+        self.current_animation = "appear"
+
+        self.phase = 1               
+        self.state = "spawning"      
+        self.spawn_timer = 2.0
+        self.invincible = True
+
+        self.attack_cooldown_phase1 = 3.0
+        self.attack_cooldown_phase2 = 2.0
+        self.attack_cooldown = self.attack_cooldown_phase1
+        self.attack_timer = 0.0
+
+        self.current_pattern = None
+        self.pattern_step = 0
+        self.pattern_timer = 0.0
+ 
+        self.ground_y_offset = 300
+        self.move_speed = 400
+        self.teleport_cooldown = 0.0
+
+        self._cached_laser_base_angle = 0.0
+
+        self._defense_active = False
+        self.was_hit_during_defense = False
+
+    def take_damage(self, damage, is_forcing=False):
+        took = super().take_damage(damage, is_forcing)
+        if self.state == "attacking" and self.current_pattern == "defense_counter" and self._defense_active:
+            self.was_hit_during_defense = True
+        return took
+
+    def enter_phase2(self):
+        self.phase = 2
+        self.attack_cooldown = self.attack_cooldown_phase2
+
+    def update(self, delta, player, camera, pulses, lasers, platforms):
+        if self.HP <= 0 and self.state != "dead":
+            self.state = "dead"
+            self.current_animation = "stunned"
+
+        if self.state == "dead":
+            self.update_animation(delta)
+            return
+
+        if self.state == "spawning":
+            self.spawn_timer -= delta
+            self.current_animation = "appear"
+            self.y = abs(camera.camera_y) + self.ground_y_offset
+            if self.spawn_timer <= 0:
+                self.state = "idle"
+                self.invincible = False
+                self.current_animation = "idle"
+            self.update_animation(delta)
+            return
+
+        if self.phase == 1 and self.HP <= self.max_HP * 0.1:
+            self.enter_phase2()
+
+        self.attack_timer += delta
+        if self.teleport_cooldown > 0:
+            self.teleport_cooldown -= delta
+
+        if self.state == "attacking":
+            self.update_pattern(delta, player, camera, pulses, lasers, platforms)
+        else:
+            if self.attack_timer >= self.attack_cooldown:
+                self.choose_next_pattern(player)
+                self.state = "attacking"
+                self.pattern_step = 0
+                self.pattern_timer = 0.0
+                self.attack_timer = 0.0
+
+        self.update_animation(delta)
+
+    def choose_next_pattern(self, player):
+        patterns_phase1 = ["dimension_strike", "ground_shock", "edge_shredding"]
+        patterns_phase2 = ["dimension_strike", "ground_shock", "edge_shredding",
+                           "trembling_slash", "defense_counter", "cutting_dimension"]
+
+        if self.phase == 1:
+            pool = patterns_phase1
+        else:
+            pool = patterns_phase2
+
+        self.current_pattern = random.choice(pool)
+        if self.current_pattern != "defense_counter":
+            self._defense_active = False
+            self.was_hit_during_defense = False
+
+    def update_pattern(self, delta, player, camera, pulses, lasers, platforms):
+        if self.current_pattern == "dimension_strike":
+            done = self.pattern_dimension_strike(delta, player, camera, lasers)
+        elif self.current_pattern == "ground_shock":
+            done = self.pattern_ground_shock(delta, player, camera, pulses)
+        elif self.current_pattern == "edge_shredding":
+            done = self.pattern_edge_shredding(delta, player, camera, pulses)
+        elif self.current_pattern == "trembling_slash":
+            done = self.pattern_trembling_slash(delta, player, camera, lasers)
+        elif self.current_pattern == "defense_counter":
+            done = self.pattern_defense_counter(delta, player, camera, pulses)
+        elif self.current_pattern == "cutting_dimension":
+            done = self.pattern_cutting_dimension(delta, player, camera, lasers)
+        else:
+            done = True
+
+        if done:
+            self.state = "idle"
+            self.current_pattern = None
+            self.current_animation = "idle"
+            self._defense_active = False
+            self.was_hit_during_defense = False
+
+    def pattern_dimension_strike(self, delta, player, camera, lasers):
+        self.pattern_timer += delta
+
+        if self.pattern_step == 0:
+            self.current_animation = "shootready"
+            self.y = abs(camera.camera_y) + self.ground_y_offset
+
+            dx = (player.x + player.width // 2) - (self.x + self.width // 2)
+            dy = (player.y + player.height // 2) - (self.y + self.height // 2)
+            base_angle = math.atan2(dy, dx)
+            self._cached_laser_base_angle = base_angle
+
+            if self.pattern_timer >= 0.5:
+                self.fire_laser_volley(camera, lasers, volley_index=0)
+                self.current_animation = "shoot"
+                self.pattern_step = 1
+                self.pattern_timer = 0.0
+        elif self.pattern_step == 1:
+            if self.pattern_timer >= 0.3:
+                self.fire_laser_volley(camera, lasers, volley_index=1)
+                self.pattern_step = 2
+                self.pattern_timer = 0.0
+
+        elif self.pattern_step == 2:
+            if self.pattern_timer >= 0.6:
+                return True
+
+        return False
+
+    def fire_laser_volley(self, camera, lasers, volley_index):
+        base_angle = self._cached_laser_base_angle
+
+        if volley_index == 1:
+            base_angle += math.radians(30)
+
+        spread = math.radians(15)
+        angles = [base_angle - spread, base_angle, base_angle + spread]
+
+        start_x = self.x + self.width // 2
+        start_y = self.y + self.height // 2
+        damage = 50
+        max_length = 2000
+
+        for ang in angles:
+            beam = LaserBeam(start_x, start_y, ang, damage,
+                             max_length=max_length, camera=camera, dagger=None)
+            beam.needs_raycast = True
+            lasers.append(beam)
+
+    def pattern_ground_shock(self, delta, player, camera, pulses):
+        self.pattern_timer += delta
+
+        if self.pattern_step == 0:
+            self.current_animation = "shootready"
+            self.y = abs(camera.camera_y) + self.ground_y_offset
+            if self.pattern_timer >= 0.6:
+                effect = {"damage": 1, "knockback": (0, -800)}
+                pulse = PulseWave(
+                    x=self.x + self.width // 2,
+                    y=self.y + self.height // 2,
+                    initial_radius=10,
+                    max_radius=260,
+                    thickness=20,
+                    growth_speed=450,
+                    color=BLUE,
+                    filled=False,
+                    effect=effect,
+                )
+                pulses.append(pulse)
+                self.pattern_step = 1
+                self.pattern_timer = 0.0
+
+        elif self.pattern_step == 1:
+            if self.pattern_timer >= 0.5:
+                return True
+
+        return False
+
+    def pattern_edge_shredding(self, delta, player, camera, pulses):
+        self.pattern_timer += delta
+
+        if self.pattern_step == 0:
+            self.current_animation = "strikeready"
+            offset_x = 250 * (1 if random.random() < 0.5 else -1)
+            self.x = max(100, min(player.x + offset_x, SCREEN_WIDTH - 200))
+            self.y = abs(camera.camera_y) - 150
+            if self.pattern_timer >= 0.4:
+                self.pattern_step = 1
+                self.pattern_timer = 0.0
+
+        elif self.pattern_step == 1:
+            self.current_animation = "falling"
+            fall_speed = 3000
+            self.y += fall_speed * delta
+            target_y = abs(camera.camera_y) + self.ground_y_offset
+            if self.y >= target_y:
+                self.y = target_y
+                effect = {"damage": 2, "knockback": (0, -1200)}
+                pulse = PulseWave(
+                    x=self.x + self.width // 2,
+                    y=self.y + self.height,
+                    initial_radius=15,
+                    max_radius=280,
+                    thickness=25,
+                    growth_speed=500,
+                    color=BLUE,
+                    filled=False,
+                    effect=effect,
+                )
+                pulses.append(pulse)
+                self.pattern_step = 2
+                self.pattern_timer = 0.0
+
+        elif self.pattern_step == 2:
+            if self.pattern_timer >= 0.6:
+                return True
+
+        return False
+
+    def pattern_trembling_slash(self, delta, player, camera, lasers):
+        self.pattern_timer += delta
+
+        if self.pattern_step == 0:
+            self.current_animation = "attackready"
+            if self.pattern_timer >= 0.3:
+                offset_x = 200 * (1 if random.random() < 0.5 else -1)
+                self.x = max(100, min(player.x + offset_x, SCREEN_WIDTH - 200))
+                self.y = abs(camera.camera_y) + self.ground_y_offset
+                self._slash_count = 0
+                self.pattern_step = 1
+                self.pattern_timer = 0.0
+
+        elif self.pattern_step == 1:
+            if self.pattern_timer >= 0.25:
+                self.current_animation = "attack"
+                self._slash_count += 1
+                dx = (player.x + player.width // 2) - (self.x + self.width // 2)
+                dy = (player.y + player.height // 2) - (self.y + self.height // 2)
+                ang = math.atan2(dy, dx)
+                damage = 40
+                max_length = 400
+                beam = LaserBeam(
+                    self.x + self.width // 2,
+                    self.y + self.height // 2,
+                    ang,
+                    damage,
+                    max_length=max_length,
+                    camera=camera,
+                    dagger=None,
+                )
+                beam.needs_raycast = True
+                lasers.append(beam)
+
+                self.pattern_timer = 0.0
+                if self._slash_count >= 3:
+                    self.pattern_step = 2
+                    self.pattern_timer = 0.0
+
+        elif self.pattern_step == 2:
+            if self.pattern_timer >= 0.5:
+                return True
+
+        return False
+
+
+    def pattern_defense_counter(self, delta, player, camera, pulses):
+        self.pattern_timer += delta
+
+        if self.pattern_step == 0:
+            self.current_animation = "defenseready"
+            if self.pattern_timer >= 0.3:
+                self.current_animation = "defense"
+                self._defense_active = True
+                self.was_hit_during_defense = False
+                self.pattern_step = 1
+                self.pattern_timer = 0.0
+
+        elif self.pattern_step == 1:
+            guard_duration = 2.0
+            if self.pattern_timer >= guard_duration:
+                self.pattern_step = 2
+                self.pattern_timer = 0.0
+
+        elif self.pattern_step == 2:
+            if self.was_hit_during_defense:
+                self.current_animation = "counter"
+                if self.pattern_timer == 0.0:
+                    effect = {"damage": 2, "knockback": (0, -1500)}
+                    pulse = PulseWave(
+                        x=self.x + self.width // 2,
+                        y=self.y + self.height // 2,
+                        initial_radius=10,
+                        max_radius=220,
+                        thickness=25,
+                        growth_speed=600,
+                        color=BLUE,
+                        filled=False,
+                        effect=effect,
+                    )
+                    pulses.append(pulse)
+                if self.pattern_timer >= 0.7:
+                    return True
+            else:
+                if self.pattern_timer >= 0.3:
+                    return True
+
+        return False
+
+    def pattern_cutting_dimension(self, delta, player, camera, lasers):
+        self.pattern_timer += delta
+
+        if self.pattern_step == 0:
+            self.current_animation = "shootready"
+            self.y = abs(camera.camera_y) + self.ground_y_offset
+            if self.pattern_timer >= 0.8:
+                self._cd_shots_done = 0
+                self.pattern_step = 1
+                self.pattern_timer = 0.0
+
+        elif self.pattern_step == 1:
+            shot_interval = 0.3
+            max_shots = 6
+            if self.pattern_timer >= shot_interval and self._cd_shots_done < max_shots:
+                self.pattern_timer = 0.0
+                self._cd_shots_done += 1
+
+                rand_x = random.randint(100, SCREEN_WIDTH - 100)
+                start_y = abs(camera.camera_y) - 50
+                angle = math.pi / 2
+                damage = 40
+                max_length = SCREEN_HEIGHT * 1.5
+                beam = LaserBeam(rand_x, start_y, angle, damage,
+                                 max_length=max_length, camera=camera, dagger=None)
+                beam.needs_raycast = True
+                lasers.append(beam)
+
+            if self._cd_shots_done >= max_shots and self.pattern_timer >= 0.5:
+                self.pattern_step = 2
+                self.pattern_timer = 0.0
+
+        elif self.pattern_step == 2:
+            if self.pattern_timer >= 0.8:
+                return True
+
+        return False
+    
+    def draw(self, surface, camera):
+        super().draw(surface, camera)
+
 
 class EnemySpawner:
     def __init__(self):
@@ -2218,7 +2594,7 @@ class Game:
             self.player.weapon.shotgun_enabled = True
 
         elif upgrade_name == "DestructiveLaser":
-            self.player.weapon.destructive_chance = 0.3
+            self.player.weapon.destructive_chance = 0.1
 
         elif upgrade_name == "Explosive":
             self.player.weapon.explosive_chance = 0.4
@@ -2269,6 +2645,14 @@ class Game:
                 self.enemy_spawner.change_pattern(pattern_change.get("enemy_pattern"))
             if pattern_change.get("platform_pattern") is not None:
                 self.PlatformGenerator.change_pattern(pattern_change.get("platform_pattern"))
+            if pattern_change.get("min_gap_y") is not None:
+                self.PlatformGenerator.min_gap_y = pattern_change.get("min_gap_y")
+            if pattern_change.get("max_gap_y") is not None:
+                self.PlatformGenerator.max_gap_y = pattern_change.get("max_gap_y")
+            if pattern_change.get("min_width") is not None:
+                self.PlatformGenerator.min_width = pattern_change.get("min_width")
+            if pattern_change.get("max_width") is not None:
+                self.PlatformGenerator.max_width = pattern_change.get("max_width")
 
 
         if self.current_event == 'Speeding Up.' and not self.speed_upable:
@@ -2321,7 +2705,7 @@ class Game:
             for i in range(len(self.current_pulses) - 1, -1, -1):
                 self.current_pulses[i].update(delta)
 
-                effect = self.current_pulses[i].check_collision(self.player)
+                effect = self.current_pulses[i].check_collision_enemy(self.player)
 
                 if effect:
                     if "knockback" in effect:
