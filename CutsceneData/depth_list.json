@@ -2,7 +2,6 @@
     "0": {
         "enemy_pattern": [
             "FireRobot",
-            "None",
             "None"
         ],
         "platform_pattern": ["Normal", "Normal", "Breakable", "Breakable", "Breakable"]
@@ -32,6 +31,66 @@
             "FireRobot",
             "FireRobot",
             "RangedRobot"
+        ],
+        "platform_pattern": ["Normal", "Normal", "Breakable", "Breakable", "Normal", "Normal", "Breakable", "Normal"],
+        "min_gap_y": 70,
+        "max_gap_y": 150,
+        "min_width": 600,
+        "max_width": 800
+    },
+    "25000": {
+        "enemy_pattern": [
+            "FireRobot",
+            "FireRobot",
+            "None",
+            "FireRobot",
+            "FireRobot",
+            "RangedRobot"
+        ],
+        "platform_pattern": ["Normal", "Normal", "Breakable", "Breakable", "Normal", "Normal", "Breakable", "Normal"],
+        "min_gap_y": 70,
+        "max_gap_y": 150,
+        "min_width": 600,
+        "max_width": 800
+    },
+    "35000": {
+        "enemy_pattern": [
+            "FireRobot",
+            "FireRobot",
+            "None",
+            "FireRobot",
+            "FireRobot",
+            "RangedRobot"
+        ],
+        "platform_pattern": ["Normal", "Normal", "Breakable", "Breakable", "Normal", "Normal", "Breakable", "Normal"],
+        "min_gap_y": 70,
+        "max_gap_y": 150,
+        "min_width": 600,
+        "max_width": 800
+    },
+    "45000": {
+        "enemy_pattern": [
+            "FireRobot",
+            "FireRobot",
+            "None",
+            "FireRobot",
+            "FireRobot",
+            "RangedRobot",
+            "ExplosiveRobot",
+            "ExplosiveRobot"
+        ],
+        "platform_pattern": ["Normal", "Normal", "Breakable", "Breakable", "Normal", "Normal", "Breakable", "Normal"],
+        "min_gap_y": 70,
+        "max_gap_y": 150,
+        "min_width": 600,
+        "max_width": 800
+    },
+    "85000": {
+        "enemy_pattern": [
+            "ExplosiveRobot",
+            "FireRobot",
+            "ExplosiveRobot",
+            "ExplosiveRobot"
         ],
         "platform_pattern": ["Normal", "Normal", "Breakable", "Breakable", "Normal", "Normal", "Breakable", "Normal"],
         "min_gap_y": 70,
