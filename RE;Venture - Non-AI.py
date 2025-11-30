@@ -31,6 +31,18 @@ def sungsoo_wihan_package_downloader(package):
         "Font/DNFForgedBlade-Medium.ttf",
         "Sprites/Backgrounds/5km.png",
         "CutsceneData/cutscene_data.json",
+        "SFX/23M-RFT70_Appear.mp3",
+        "SFX/23M-RFT70_Teleport.mp3",
+        "SFX/23M-RFT70_TeleportEnd.mp3",
+        "SFX/23M-RFT70_AttackAlarm.mp3",
+        "SFX/23M-RFT70_Death.mp3",
+        "SFX/23M-RFT70_EdgeShredding.mp3",
+        "SFX/23M-RFT70_CuttingDimension.mp3",
+        "SFX/23M-RFT70_TremblingSlash.mp3",
+        "SFX/Break_platform.mp3",
+        "SFX/Hype.mp3",
+        "SFX/Interude.mp3",
+        "SFX/RE_Venture-Starting.wav",
     ]
 
     assets += [f"Sprites/Backgrounds/Main{i}.png" for i in range(1, 5)]
@@ -39,6 +51,8 @@ def sungsoo_wihan_package_downloader(package):
     assets += [f"Sprites/Enemy/Fire_Robot/Fire_Robot{i}.png" for i in range(1, 11)]
     assets += [f"Sprites/Enemy/Ranged_Robot/Ranged_Robot{i}.png" for i in range(1, 27)]
     assets += [f"Sprites/Entities/Laser/Laser{i}.png" for i in range(1, 11)]
+    assets += [f"Sprites/Boss/23M-RFT70/23M-{i}.png" for i in range(1, 61)]
+    assets += [f"SFX/10km_Howling{i}.png" for i in range(1, 6)]
 
     import urllib.request
     import os
@@ -1885,7 +1899,7 @@ class Boss23M(Enemy):
     sprite_cash = None
 
     def __init__(self, x, y):
-        boss_hp = 15000     
+        boss_hp = 1000000     
         sprite_size = (128, 128)
         super().__init__(boss_hp, sprite_size, False, x, y)
 
