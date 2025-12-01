@@ -9,8 +9,6 @@
     "35000": {
         "enemy_pattern": [
             "RangedRobot",
-            "FireRobot",
-            "FireRobot",
             "RangedRobot"
         ],
         "platform_pattern": ["Breakable", "Normal", "Breakable", "Normal", "Breakable", "Normal", "Breakable", "Breakable"],
